@@ -1,0 +1,8 @@
+// {info.todo}: remove tags which do not apply to dataset.
+content.data-type.3d # Contains 3d data.
+content.data-type.categorical # Contains categorical data.
+content.data-type.image # Contains image data.
+content.subject.health # Relates to health.
+ml.task.image-classification # Relates to Image Classification, a machine learning task.
+ml.task.image-clustering # Relates to Image Clustering, a machine learning task.
+ml.task.image-segmentation # Relates to Image Segmentation, a machine learning task.
