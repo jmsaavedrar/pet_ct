@@ -48,8 +48,8 @@ def extractImages(data_img, data_mask):
         images.append(ct)
         masks.append(segment)
 
-    images = np.stack(images, axis=2)
-    masks = np.stack(masks, axis=2)
+    images = np.array(images)
+    masks = np.array(masks)
     return(images, masks)
 
 # margen 4
@@ -77,7 +77,6 @@ def roiExtraction (img,mask,margin):
 @dataclass
 class ExamConfig(tfds.core.BuilderConfig):
   img_type: str = 'pet'
-  win_size: int = 1
 
 
 class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
@@ -90,9 +89,8 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
   }
 
   BUILDER_CONFIGS = [
-      ExamConfig(name=f'{type}_{i}', description=f'Resultados de tomografia {type.upper()}', img_type=type, win_size=i)
+      ExamConfig(name=f'{type}', description=f'Resultados de tomografia {type.upper()}', img_type=type)
       for type in ['pet', 'torax3d', 'body']
-      for i in range(1, 2)
   ]
 
 
@@ -108,14 +106,10 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
         features=tfds.features.FeaturesDict({
             # Features of the dataset
             'patient_id': tfds.features.Text(doc='Id of patients of Santa Maria'),
-            'img_exam': tfds.features.Tensor(shape=(None, None, self.builder_config.win_size),
+            'img_exam': tfds.features.Tensor(shape=(None, None),
                                             dtype=np.uint16,
                                             encoding='zlib',
                                             doc = 'Exam Images'),
-            'mask_exam': tfds.features.Tensor(shape=(None, None, self.builder_config.win_size),
-                                            dtype=np.uint16,
-                                            encoding='zlib',
-                                            doc = 'Tumor Mask'),
             'label': tfds.features.ClassLabel(num_classes=2, 
                                               doc='Results on the EGFR Mutation test.'),
         }),
@@ -161,28 +155,23 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
           if os.path.exists(image_file_path) and os.path.exists(label_file_path):
             data_exam, _ = nrrd.read(image_file_path)
             mask_exam, _ = nrrd.read(label_file_path)
-
+            
             # Extrae solo los las imagenes  los niveles que contienen segmentacion
             cut_data_exam, cut_mask_exam = extractImages(data_exam, mask_exam)
-            roi_body = roiExtraction(cut_data_exam, cut_mask_exam, margin)
+            cut_data_roi = roiExtraction(cut_data_exam, cut_mask_exam, margin)
             
             # Convierte el dtype de las imagenes a uint8
-            cut_data_exam = cut_data_exam.astype(np.uint16)
-            cut_mask_exam = cut_mask_exam.astype(np.uint16)
+            #cut_data_roi = cut_data_roi.astype(np.uint16)
+            for i in range(cut_data_roi.shape[0]):
+              data_exam_i = cut_data_roi[i].astype(np.uint16)
 
-            window_size = self.builder_config.win_size
-            for i in range(cut_data_exam.shape[2] - window_size + 1):
-              data_exam_i = cut_data_exam[:, :, i:i+window_size]
-              mask_exam_i = cut_mask_exam[:, :, i:i+window_size]
+              print('data shape:', data_exam_i.shape)
 
-              # Crea una llave unica usando el patient_id y el indice del loop
+              # Create a unique key using the patient_id and the index of the loop
               example_key = f'{patient_id}_{i}'
 
               yield example_key, {
                   'patient_id': patient_id,
                   'img_exam': data_exam_i,
-                  'mask_exam': mask_exam_i,
                   'label': row['EGFR'],
               }
-
-
