@@ -23,11 +23,11 @@ from dataclasses import dataclass
 def extractImages(data_img, data_mask):
 
     """
-    Función que extrae sólo las imágenes de los niveles que contienen segmentación.
-    INPUT: volumen de imágenes y máscaras numpy array 3D (numero de imagen, alto, ancho), directo de la
-    carga del archivo .nrrd.
-    Busca las máscaras con segmentaciones y extrae los cortes de estos niveles.
-    OUTPUT: devuelve np.array 3D con las imágenes y máscaras sólo de los niveles del tumor.
+  Función que extrae sólo las imágenes de los niveles que contienen segmentación.
+  INPUT: volumen de imágenes y máscaras numpy array 3D (numero de imagen, alto, ancho), directo de la
+  carga del archivo .nrrd.
+  Busca las máscaras con segmentaciones y extrae los cortes de estos niveles.
+  OUTPUT: devuelve np.array 3D con las imágenes y máscaras sólo de los niveles del tumor.
     """
 
     images = []
@@ -46,81 +46,14 @@ def extractImages(data_img, data_mask):
         images.append(ct)
         masks.append(segment)
 
-    images = np.array(images)
-    masks = np.array(masks)
+    images = np.stack(images, axis=2)
+    masks = np.stack(masks, axis=2)
     return(images, masks)
-
-
-def roiExtraction(img, mask, total_size):
-    """
-    Function to extract ROIs from images while ensuring a consistent total size for all ROIs.
-
-    INPUT:
-    img: Numpy array of images.
-    mask: Numpy array of masks.
-    total_size: The desired total size (width and height) of the extracted ROIs.
-
-    OUTPUT: Numpy array containing the ROIs.
-    """
-    roi_extract = []
-
-    for i in range(mask.shape[0]):
-        img_instance = img[i].copy()
-        mask_instance = mask[i].copy()
-
-        # Calculate the center of the mask.
-        center_row = int(np.mean(index[0]))
-        center_col = int(np.mean(index[1]))
-
-        # Calculate the size of the ROI based on the total size.
-        half_size = total_size // 2
-
-        # Determine ROI boundaries with the margin.
-        min_row = max(0, center_row - half_size)
-        max_row = min(mask_instance.shape[0], center_row + half_size)
-        min_col = max(0, center_col - half_size)
-        max_col = min(mask_instance.shape[1], center_col + half_size)
-
-        # Calculate the width and height of the ROI.
-        roi_height = max_row - min_row
-        roi_width = max_col - min_col
-
-        # Case 1: If the ROI is smaller than the total_size, add a margin to make it total_size.
-        if roi_height < total_size:
-            margin = (total_size - roi_height) // 2
-            min_row -= margin
-            max_row += margin
-
-        if roi_width < total_size:
-            margin = (total_size - roi_width) // 2
-            min_col -= margin
-            max_col += margin
-
-        # Case 2: If the ROI is larger than total_size, resize it.
-        if roi_height > total_size or roi_width > total_size:
-            scale_factor = total_size / max(roi_height, roi_width)
-            new_height = int(roi_height * scale_factor)
-            new_width = int(roi_width * scale_factor)
-            min_row = max(center_row - new_height // 2, 0)
-            max_row = min(min_row + new_height, mask_instance.shape[0])
-            min_col = max(center_col - new_width // 2, 0)
-            max_col = min(min_col + new_width, mask_instance.shape[1])
-
-        # Extract the ROI with the desired size.
-        roi = img_instance[min_row:max_row, min_col:max_col]
-        # Add to the results.
-        roi_extract.append(roi)
-
-    roi_extract = np.array(roi_extract, dtype=object)
-    return roi_extract
-
-
 
 
 @dataclass
 class ExamConfig(tfds.core.BuilderConfig):
   img_type: str = 'pet'
-  img_size: int = 32
 
 
 class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
@@ -133,10 +66,9 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
   }
 
   BUILDER_CONFIGS = [
-      ExamConfig(name=f'{type}_{tamano}', description=f'Resultados de tomografia {type.upper()} de tamaño {tamano}',
-      img_type=type, img_size=tamano)
+      ExamConfig(name=f'{type}', description=f'Resultados de tomografia {type.upper()}',
+      img_type=type)
       for type in ['pet', 'torax3d', 'body']
-      for tamano in [32, 64, 128]
   ]
 
 
@@ -152,10 +84,14 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
         features=tfds.features.FeaturesDict({
             # Features of the dataset
             'patient_id': tfds.features.Text(doc='Id of patients of Santa Maria'),
-            'img_exam': tfds.features.Tensor(shape=(self.builder_config.img_size, self.builder_config.img_size),
+            'img_exam': tfds.features.Tensor(shape=(None, None),
                                             dtype=np.uint16,
                                             encoding='zlib',
                                             doc = 'Exam Images'),
+            'mask_exam': tfds.features.Tensor(shape=(None, None),
+                                            dtype=np.uint16,
+                                            encoding='zlib',
+                                            doc = 'Tumor Mask'),
             'label': tfds.features.ClassLabel(num_classes=2, 
                                               doc='Results on the EGFR Mutation test.'),
         }),
@@ -175,8 +111,6 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
     archive_path = 'santa_maria_data/'
 
     final_patients = []
-
-
     data_file = Path(os.path.join(archive_path, 'santamaria_data.csv'))
     with data_file.open() as f:
       for row in csv.DictReader(f):
@@ -206,12 +140,12 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
             
             # Extrae solo los las imagenes  los niveles que contienen segmentacion
             cut_data_exam, cut_mask_exam = extractImages(data_exam, mask_exam)
-            cut_data_roi = roiExtraction(cut_data_exam, cut_mask_exam, self.builder_config.img_size)
-            
+            print(cut_data_exam.shape, cut_mask_exam.shape)
             # Convierte el dtype de las imagenes a uint8
             #cut_data_roi = cut_data_roi.astype(np.uint16)
-            for i in range(cut_data_roi.shape[0]):
-              data_exam_i = cut_data_roi[i].astype(np.uint16)
+            for i in range(cut_data_exam.shape[2]):
+              data_exam_i = cut_data_exam[:,:,i].astype(np.uint16)
+              mask_exam_i = cut_mask_exam[:,:,i].astype(np.uint16)
 
               # Create a unique key using the patient_id and the index of the loop
               example_key = f'{patient_id}_{i}'
@@ -219,5 +153,6 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
               yield example_key, {
                   'patient_id': patient_id,
                   'img_exam': data_exam_i,
+                  'mask_exam': mask_exam_i,
                   'label': row['EGFR'],
               }

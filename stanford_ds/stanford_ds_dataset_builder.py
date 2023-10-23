@@ -11,9 +11,8 @@ import cv2
 from tqdm import trange
 from pathlib import Path
 from dataclasses import dataclass
+import pydicom
 
-
-margin = 4
 
 def extractImages(data_img, data_mask):
 
@@ -41,30 +40,9 @@ def extractImages(data_img, data_mask):
         images.append(ct)
         masks.append(segment)
 
-    images = np.array(images)
-    masks = np.array(masks)
+    images = np.stack(images, axis=2)
+    masks = np.stack(masks, axis=2)
     return(images, masks)
-
-# margen 4
-def roiExtraction (img,mask,margin):
-    """
-  Función para extraer el ROI donde se encuentra el tumor en una imagen.
-  INPUT: imagen y máscaras numpy array 2D.
-  margin: corresponde al número de pixeles como margen por fuera de los pixeles de la máscara.
-  OUTPUT: Devuelve el ROI.
-  """
-
-    roi_extract = []
-
-    for i in range(mask.shape[0]):
-        img_instance = img[i].copy()
-        mask_instance = mask[i].copy()
-        index = np.where(mask_instance)
-        roi = img_instance[np.unique(index[0])[0]-margin:np.unique(index[0])[-1]+margin, np.unique(index[1])[0]-margin: np.unique(index[1])[-1]+margin]
-        roi_extract.append(roi)
-
-    roi_extract = np.array(roi_extract, dtype='object')
-    return(roi_extract)
 
 
 @dataclass
@@ -94,6 +72,10 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                                           dtype=np.uint16,
                                           encoding='zlib',
                                           doc = 'Exam Images'),
+          'mask_exam': tfds.features.Tensor(shape=(None, None),
+                                          dtype=np.uint16,
+                                          encoding='zlib',
+                                          doc = 'Tumor Mask'),
           'label': tfds.features.ClassLabel(num_classes=2, 
                                             doc='Results on the EGFR Mutation test.'),
       }),
@@ -110,14 +92,19 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     if self.builder_config.img_type == 'pet': exam_name = 'pet_image'
 
      # Carpeta donde la data se encuentra
-    archive_path = 'stanford_data/'
+    archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/stanford_data/'
 
     final_patients = []
     data_file = Path(os.path.join(archive_path, 'stanford_data_info.csv'))
     with data_file.open() as f:
       for row in csv.DictReader(f):
-        if row[exam_name] == '1' and row[exam_name][:3] == 'AMC': 
+        if row[exam_name] == '1' and row['Case ID'][:3] == 'R01': 
           final_patients.append(row['Case ID'])
+    
+    print(final_patients)
+    final_patients.remove('R01-022')
+    final_patients.remove('R01-026')
+    final_patients.remove('R01-038')
 
     # Create dictionaries of patients with their associated data
     return {patient: self._generate_examples(archive_path, patient) for patient in final_patients} 
@@ -138,23 +125,34 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
           exam_results = os.path.join(image_folder, patient_id, self.builder_config.img_type) # pytype: disable=attribute-error
           
           if os.path.exists(exam_results):
-
+            
             image_file_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_image.nrrd')
-            label_file_path =  os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_segmentation.nrrd')
+            label_base_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_segmentation')
+            label_file_path = None
+            mask_exam = None
+            if os.path.exists(label_base_path + '.nrrd'):
+                label_file_path = label_base_path + '.nrrd'
+                mask_exam, _ = nrrd.read(label_file_path)
+            elif os.path.exists(label_base_path + '.dcm'):
+                label_file_path = label_base_path + '.dcm'
+                mask_exam = pydicom.dcmread(label_file_path).pixel_array
+                mask_exam = np.moveaxis(mask_exam, 0, 2)
+            
 
+            print(image_file_path)
+            print(label_file_path)
+            
             data_exam, _ = nrrd.read(image_file_path)
-            mask_exam, _ = nrrd.read(label_file_path)
+
+            print(data_exam.shape, mask_exam.shape)
+            print()
 
             # Extrae solo los las imagenes  los niveles que contienen segmentacion
             cut_data_exam, cut_mask_exam = extractImages(data_exam, mask_exam)
-            cut_data_roi = roiExtraction(cut_data_exam, cut_mask_exam, margin)
             
-            # Convierte el dtype de las imagenes a uint8
-            #cut_data_roi = cut_data_roi.astype(np.uint16)
-            for i in range(cut_data_roi.shape[0]):
-              data_exam_i = cut_data_roi[i].astype(np.uint16)
-
-              print('data shape:', data_exam_i.shape)
+            for i in range(cut_data_exam.shape[2]):
+              data_exam_i = cut_data_exam[:,:,i].astype(np.uint16)
+              mask_exam_i = cut_mask_exam[:,:,i].astype(np.uint16)
 
               # Create a unique key using the patient_id and the index of the loop
               example_key = f'{patient_id}_{i}'
@@ -162,5 +160,6 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
               yield example_key, {
                   'patient_id': patient_id,
                   'img_exam': data_exam_i,
+                  'mask_exam': mask_exam_i,
                   'label': label_value,
               }
