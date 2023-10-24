@@ -33,8 +33,44 @@ tensorflow_datasets==4.9.2
 ```
 **IMPORTANTE**: Puede que no funcione el sistema con otra versión de las librerías anteriores.
 
-## Configuracion de los datos
-Pedir acceso a los datos *'Data Clinica Santa Maria'* y *'Data NSCLC Radiogenomics'* a Hector Henriquez. 
+## Uso de datos
+Para usar el conjunto de datos PET, CT y TORAX, pedir los conjuntos de datos de *tensorflow* a Prof. José Saavedra y descomprimir sus contenidos en el directorio en 'home/tensorflow_datasets/'. Los conjuntos de datos deberían ser:
+- santa_maria_dataset
+- stanford_dataset
+
+Habiendo configurados los datos, se pueden utilizar.
+
+### Utilizar los datos de la Clínica Santa María
+
+Desde cualquier directorio, se pueden utilizar los tres conjuntos de datos de forma independiente PET, CT y TORAX de la siguiente forma:
+
+
+```
+import tensoflow_datasets as tfds
+
+ds = tfds.load('santa_maria_dataset/<tipo_examen>') # donde <tipo_examen> puede ser 'pet', 'body' o 'torax3d'.
+dataset = ds['sm_001']                            # obtiene todos los datos del paciente 'sm_001'. Esto se puede hacer para todos los pacientes del conjunto de datos.
+```
+
+
+### Utilizar los datos Stanford
+
+Desde cualquier directorio, se pueden utilizar los tres conjuntos de datos de forma independiente PET, CT y TORAX de la siguiente forma:
+
+
+```
+import tensoflow_datasets as tfds
+
+ds = tfds.load('stanford_dataset/<tipo_examen>') # donde <tipo_examen> puede ser 'pet', 'ct' o 'chest_ct'.
+dataset = ds['R01-001']                            # obtiene todos los datos del paciente 'R01-001'. Esto se puede hacer para todos los pacientes del conjunto de datos.
+```
+
+El archivo *load_santamaria_ds_examples.ipynb* realiza un ejemplo de como construir *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje.
+
+---
+
+## Modificación de los datos
+Para modificar el conjunto de datos de *tensorflow_datasets*, en primer lugar es necesario pedir el acceso a los datos *'Data Clinica Santa Maria'* y *'Data NSCLC Radiogenomics'* a Hector Henriquez. 
 
 
 ### Configuración de datos de Santa María
@@ -60,21 +96,3 @@ A continuación, ejecutar el siguiente comando en la carpeta donde se encuentra 
 ```
 tfds build
 ```
-
-## Utilizar el conjunto de datos PET, CT y TORAX
-
-
-### Utilizar los datos de la Clínica Santa María
-
-Desde cualquier directorio, y después de haber construido el conjunto de datos, se pueden utilizar los tres conjuntos de datos de forma independiente PET, CT y TORAX de la siguiente forma:
-
-
-```
-ds = tfds.load('santa_maria_dataset/<tipo_examen>') # donde <tipo_examen> puede ser 'pet_1', 'body_1' o 'torax3d_1'.
-dataset = ds['sm_001']                            # obtiene todos los datos del paciente 'sm_001'. Esto se puede hacer para todos los pacientes del conjunto de datos.
-```
-
-El archivo *load_santamaria_ds_examples.ipynb* realiza un ejemplo de como construir *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje. Revisar el archivo.
-
-
-### Utilizar los datos Stanford

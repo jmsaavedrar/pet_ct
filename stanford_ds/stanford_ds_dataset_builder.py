@@ -98,13 +98,23 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     data_file = Path(os.path.join(archive_path, 'stanford_data_info.csv'))
     with data_file.open() as f:
       for row in csv.DictReader(f):
-        if row[exam_name] == '1' and row['Case ID'][:3] == 'R01': 
+        if row[exam_name] == '1': 
           final_patients.append(row['Case ID'])
     
-    print(final_patients)
-    final_patients.remove('R01-022')
-    final_patients.remove('R01-026')
-    final_patients.remove('R01-038')
+    if self.builder_config.img_type == 'chest_ct':
+      final_patients.remove('R01-022')
+      final_patients.remove('R01-026')
+      final_patients.remove('R01-038')
+      final_patients.remove('R01-076')
+      final_patients.remove('R01-078')
+      
+      range_to_remove = range(103, 151)
+      case_ids_to_remove = [f'R01-{str(i).zfill(3)}' for i in range_to_remove]
+
+      # Remove the specified 'Case ID' values
+      final_patients = [patient for patient in final_patients if patient not in case_ids_to_remove]
+
+
 
     # Create dictionaries of patients with their associated data
     return {patient: self._generate_examples(archive_path, patient) for patient in final_patients} 
