@@ -65,7 +65,7 @@ ds = tfds.load('stanford_dataset/<tipo_examen>') # donde <tipo_examen> puede ser
 dataset = ds['R01-001']                            # obtiene todos los datos del paciente 'R01-001'. Esto se puede hacer para todos los pacientes del conjunto de datos.
 ```
 
-El archivo *load_santamaria_ds_examples.ipynb* realiza un ejemplo de como construir *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje.
+El archivo *load_datasets_example.ipynb* realiza un ejemplo de como construir *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje.
 
 ---
 
