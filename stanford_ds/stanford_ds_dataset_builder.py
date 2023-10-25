@@ -59,7 +59,7 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
 
   BUILDER_CONFIGS = [
       ExamConfig(name=f'{type}', description=f'Resultados de tomografia {type.upper()}', img_type=type)
-      for type in ['chest_ct', 'ct', 'pet']
+      for type in ['pet', 'chest_ct', 'ct']
   ]
 
   def _info(self) -> tfds.core.DatasetInfo:
@@ -87,9 +87,16 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     # Lists of patients
 
     exam_name = None
-    if self.builder_config.img_type == 'chest_ct': exam_name = 'chest_ct_image'
-    if self.builder_config.img_type == 'ct': exam_name = 'ct_image'
-    if self.builder_config.img_type == 'pet': exam_name = 'pet_image'
+    segmentation_name = None
+    if self.builder_config.img_type == 'chest_ct': 
+      exam_name = 'chest_ct_image'
+      segmentation_name = 'chest_ct_segmentation'
+    if self.builder_config.img_type == 'ct': 
+      exam_name = 'ct_image'
+      segmentation_name = 'ct_segmentation'
+    if self.builder_config.img_type == 'pet': 
+      exam_name = 'pet_image'
+      segmentation_name = 'pet_segmentation'
 
      # Carpeta donde la data se encuentra
     archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/stanford_data/'
@@ -98,7 +105,7 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     data_file = Path(os.path.join(archive_path, 'stanford_data_info.csv'))
     with data_file.open() as f:
       for row in csv.DictReader(f):
-        if row[exam_name] == '1': 
+        if row[exam_name] == '1' and row[segmentation_name] == '1': 
           final_patients.append(row['Case ID'])
     
     if self.builder_config.img_type == 'chest_ct':
@@ -148,14 +155,8 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                 mask_exam = pydicom.dcmread(label_file_path).pixel_array
                 mask_exam = np.moveaxis(mask_exam, 0, 2)
             
-
-            print(image_file_path)
-            print(label_file_path)
-            
             data_exam, _ = nrrd.read(image_file_path)
 
-            print(data_exam.shape, mask_exam.shape)
-            print()
 
             # Extrae solo los las imagenes  los niveles que contienen segmentacion
             cut_data_exam, cut_mask_exam = extractImages(data_exam, mask_exam)
