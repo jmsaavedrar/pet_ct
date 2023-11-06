@@ -85,11 +85,11 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
             # Features of the dataset
             'patient_id': tfds.features.Text(doc='Id of patients of Santa Maria'),
             'img_exam': tfds.features.Tensor(shape=(None, None),
-                                            dtype=np.uint16,
+                                            dtype=np.float32,
                                             encoding='zlib',
                                             doc = 'Exam Images'),
             'mask_exam': tfds.features.Tensor(shape=(None, None),
-                                            dtype=np.uint16,
+                                            dtype=np.int32,
                                             encoding='zlib',
                                             doc = 'Tumor Mask'),
             'label': tfds.features.ClassLabel(num_classes=2, 
@@ -144,8 +144,8 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
             # Convierte el dtype de las imagenes a uint8
             #cut_data_roi = cut_data_roi.astype(np.uint16)
             for i in range(cut_data_exam.shape[2]):
-              data_exam_i = cut_data_exam[:,:,i].astype(np.uint16)
-              mask_exam_i = cut_mask_exam[:,:,i].astype(np.uint16)
+              data_exam_i = cut_data_exam[:,:,i].astype(np.float32)
+              mask_exam_i = cut_mask_exam[:,:,i].astype(np.int32)
 
               # Create a unique key using the patient_id and the index of the loop
               example_key = f'{patient_id}_{i}'

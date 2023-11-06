@@ -69,11 +69,11 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
           # Features of the dataset
           'patient_id': tfds.features.Text(doc='Id of patients of Stanford'),
           'img_exam': tfds.features.Tensor(shape=(None, None),
-                                          dtype=np.uint16,
+                                          dtype=np.float32,
                                           encoding='zlib',
                                           doc = 'Exam Images'),
           'mask_exam': tfds.features.Tensor(shape=(None, None),
-                                          dtype=np.uint16,
+                                          dtype=np.int32,
                                           encoding='zlib',
                                           doc = 'Tumor Mask'),
           'label': tfds.features.ClassLabel(num_classes=2, 
@@ -107,21 +107,6 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
       for row in csv.DictReader(f):
         if row[exam_name] == '1' and row[segmentation_name] == '1': 
           final_patients.append(row['Case ID'])
-    
-    if self.builder_config.img_type == 'chest_ct':
-      final_patients.remove('R01-022')
-      final_patients.remove('R01-026')
-      final_patients.remove('R01-038')
-      final_patients.remove('R01-076')
-      final_patients.remove('R01-078')
-      
-      range_to_remove = range(103, 151)
-      case_ids_to_remove = [f'R01-{str(i).zfill(3)}' for i in range_to_remove]
-
-      # Remove the specified 'Case ID' values
-      final_patients = [patient for patient in final_patients if patient not in case_ids_to_remove]
-
-
 
     # Create dictionaries of patients with their associated data
     return {patient: self._generate_examples(archive_path, patient) for patient in final_patients} 
@@ -147,13 +132,15 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
             label_base_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_segmentation')
             label_file_path = None
             mask_exam = None
+            nrrd_mask = False
             if os.path.exists(label_base_path + '.nrrd'):
-                label_file_path = label_base_path + '.nrrd'
-                mask_exam, _ = nrrd.read(label_file_path)
+              label_file_path = label_base_path + '.nrrd'
+              mask_exam, _ = nrrd.read(label_file_path)
+              nrrd_mask = True
             elif os.path.exists(label_base_path + '.dcm'):
-                label_file_path = label_base_path + '.dcm'
-                mask_exam = pydicom.dcmread(label_file_path).pixel_array
-                mask_exam = np.moveaxis(mask_exam, 0, 2)
+              label_file_path = label_base_path + '.dcm'
+              mask_exam = pydicom.dcmread(label_file_path).pixel_array
+              mask_exam = np.moveaxis(mask_exam, 0, 2)
             
             data_exam, _ = nrrd.read(image_file_path)
 
@@ -162,9 +149,17 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
             cut_data_exam, cut_mask_exam = extractImages(data_exam, mask_exam)
             
             for i in range(cut_data_exam.shape[2]):
-              data_exam_i = cut_data_exam[:,:,i].astype(np.uint16)
-              mask_exam_i = cut_mask_exam[:,:,i].astype(np.uint16)
+              data_exam_i = cut_data_exam[:,:,i].astype(np.float32)
+              data_exam_i = np.rot90(data_exam_i, k=3)
+              data_exam_i = np.fliplr(data_exam_i)
+                
+              mask_exam_i = cut_mask_exam[:,:,i].astype(np.int32)
+              if nrrd_mask:
+                # nrrd files
+                mask_exam_i = np.rot90(mask_exam_i, k=3)
+                mask_exam_i = np.fliplr(mask_exam_i)
 
+    
               # Create a unique key using the patient_id and the index of the loop
               example_key = f'{patient_id}_{i}'
 
