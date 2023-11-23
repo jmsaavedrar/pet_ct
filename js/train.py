@@ -31,7 +31,7 @@ def map_fun(image, label) :
 
 
 ds_train, ds_test = data.get_training_testing_sm_datasets(random_seed=None)
-batch_size = 32
+batch_size = 64
 
 if CHECK_DATA :
     check_data(ds_test)
@@ -55,10 +55,10 @@ else :
 
     model = models.simple_model((size, size, 3))
     cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, train_steps, alpha=alpha)
-    #optimizer=tf.keras.optimizers.AdamW(learning_rate = cosdecay, weight_decay=0.001)
+    optimizer=tf.keras.optimizers.AdamW(learning_rate = cosdecay, weight_decay=0.001)
     #optimizer=tf.keras.optimizers.SGD(learning_rate = cosdecay, momentum = 0.9)
-    optimizer=tf.keras.optimizers.Adam(learning_rate = cosdecay)
-    model.compile(optimizer, loss='categorical_crossentropy',  metrics=[metrics.true_positive_ce, metrics.false_positive_ce, tf.keras.metrics.AUC(multi_label=True, num_labels = 2)])
+    #optimizer=tf.keras.optimizers.Adam(learning_rate = cosdecay)
+    model.compile(optimizer, loss='categorical_crossentropy',  metrics=[tf.keras.metrics.AUC(multi_label=True, num_labels = 2)])
     model.fit(ds_train, 
             epochs = epochs,
             validation_data = ds_test, 

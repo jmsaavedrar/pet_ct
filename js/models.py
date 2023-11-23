@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 def conv_bn_relu(channels) :
-    conv = tf.keras.layers.Conv2D(channels, kernel_size=3, strides=1, padding='same', kernel_regularizer = tf.keras.regularizers.L2(0.0005))
+    conv = tf.keras.layers.Conv2D(channels, kernel_size=3, strides=1, padding='same', kernel_regularizer = tf.keras.regularizers.L2())
     bn = tf.keras.layers.BatchNormalization()
     relu =  tf.keras.layers.Activation('relu')
     
@@ -29,8 +29,8 @@ def simple_model(shape) :
     x = tf.keras.layers.MaxPooling2D()(x)    
     # classification head
     x = tf.keras.layers.GlobalAveragePooling2D()(x)    
-    x = tf.keras.layers.Dense(256, activation = 'relu', kernel_regularizer = tf.keras.regularizers.L2(0.0005))(x)
-    x = tf.keras.layers.Dense(128, activation = 'relu', kernel_regularizer = tf.keras.regularizers.L2(0.0005))(x)
+    x = tf.keras.layers.Dense(256, activation = 'relu', kernel_regularizer = tf.keras.regularizers.L2())(x)
+    x = tf.keras.layers.Dense(128, activation = 'relu', kernel_regularizer = tf.keras.regularizers.L2())(x)
     #x = tf.keras.layers.Dense(1, activation = 'sigmoid')(x)
     x = tf.keras.layers.Dense(2, activation = 'softmax')(x)
     model = tf.keras.models.Model(inputs = x_input, outputs = x)
