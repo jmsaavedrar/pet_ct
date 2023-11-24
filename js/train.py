@@ -23,8 +23,12 @@ def check_data(data) :
 def map_fun(image, label) :    
     
     #TODO 
+    crop_size = 512
     image = tf.expand_dims(image, -1)
     image = tf.image.grayscale_to_rgb(image)
+    size = int(crop_size * 1.15)
+    image = tf.image.resize_with_pad(image, size, size)
+    image = tf.image.random_crop(image, (crop_size, crop_size,3))
     image = tf.image.random_flip_left_right(image)
     label =  tf.one_hot(label, 2)
     return image, label
@@ -54,11 +58,13 @@ else :
 
 
     model = models.simple_model((size, size, 3))
-    cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, train_steps, alpha=alpha)
-    optimizer=tf.keras.optimizers.AdamW(learning_rate = cosdecay, weight_decay=0.001)
+    cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, decay_steps  = train_steps, alpha = alpha)
+    optimizer=tf.keras.optimizers.AdamW(learning_rate = cosdecay)
     #optimizer=tf.keras.optimizers.SGD(learning_rate = cosdecay, momentum = 0.9)
     #optimizer=tf.keras.optimizers.Adam(learning_rate = cosdecay)
-    model.compile(optimizer, loss='categorical_crossentropy',  metrics=[tf.keras.metrics.AUC(multi_label=True, num_labels = 2)])
+    model.compile(optimizer, loss='categorical_crossentropy',  metrics=[metrics.true_positive, 
+                                                                        metrics.false_positive,  
+                                                                        tf.keras.metrics.AUC(multi_label=True, num_labels = 2)])
     model.fit(ds_train, 
             epochs = epochs,
             validation_data = ds_test, 
