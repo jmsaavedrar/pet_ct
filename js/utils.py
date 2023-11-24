@@ -1,5 +1,7 @@
 import numpy as np
 import skimage.measure as measure
+import tensorflow as tf
+
 
 
 def merge_boxes(rprops) :    
@@ -15,9 +17,10 @@ def get_biggest_region(rprops) :
     areas = np.array([r.area for r in rprops])    
     return rprops[np.argmax(areas)]
 
-def get_roi(data, mask, padding) :
+def get_roi(data, mask, padding, min_val) :
     cc = measure.label(mask)
     props = measure.regionprops(cc)
     roi =  merge_boxes(props)
-    data_roi = data[roi[0]-padding:roi[2]+padding, roi[1] - padding:roi[3] + padding]
+    data_seg = tf.where(mask == 1, data, min_val)
+    data_roi = data_seg[roi[0]-padding:roi[2]+padding, roi[1] - padding:roi[3] + padding]
     return roi, data_roi 
