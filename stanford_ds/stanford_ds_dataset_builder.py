@@ -5,49 +5,18 @@ import os
 import nrrd
 import csv
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import cv2
 from tqdm import trange
 from pathlib import Path
 from dataclasses import dataclass
 import pydicom
 
 
-def extractImages(data_img, data_mask):
-
-    """
-  Función que extrae sólo las imágenes de los niveles que contienen segmentación.
-  INPUT: volumen de imágenes y máscaras numpy array 3D (numero de imagen, alto, ancho), directo de la
-  carga del archivo .nrrd.
-  Busca las máscaras con segmentaciones y extrae los cortes de estos niveles.
-  OUTPUT: devuelve np.array 3D con las imágenes y máscaras sólo de los niveles del tumor.
-    """
-
-    images = []
-    masks = []
-    positive_slices = []
-
-    for i in trange(data_img.shape[2]):
-        segmentation = data_mask[:,:,i]
-        if (np.sum(segmentation)>0):
-            positive_slices.append(i)
-
-        ## Extrae las imágenes sólo con segmentación - tumor
-    for axial in positive_slices:
-        segment = data_mask[:,:,axial]
-        ct = data_img[:,:,axial]
-        images.append(ct)
-        masks.append(segment)
-
-    images = np.stack(images, axis=2)
-    masks = np.stack(masks, axis=2)
-    return(images, masks)
-
+# roi - R01-001, R01-002, R01-014, 033, 052, 049, 042, 039
+# 
 
 @dataclass
 class ExamConfig(tfds.core.BuilderConfig):
-  img_type: str = 'pet'
+  img_type: str = 'ct'
 
 class StanfordDataset(tfds.core.GeneratorBasedBuilder):
   """DatasetBuilder for stanford_ds dataset."""
@@ -59,7 +28,7 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
 
   BUILDER_CONFIGS = [
       ExamConfig(name=f'{type}', description=f'Resultados de tomografia {type.upper()}', img_type=type)
-      for type in ['pet', 'chest_ct', 'ct']
+      for type in ['chest_ct', 'pet', 'ct']
   ]
 
   def _info(self) -> tfds.core.DatasetInfo:
@@ -118,10 +87,12 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     # Lee el archivo csv y retorna los ejemplos de un examen (pet, ct o torax) para una ventana (numero entero).
     data_file = Path(os.path.join(path, 'stanford_data_info.csv'))
     image_folder = os.path.join(path, 'data')
+    
+    dcm_patients = []
     with data_file.open() as f:
       for row in csv.DictReader(f):
         patient_id = row['Case ID']
-        
+
         if patient_id == patient_list:
           label_value  = 1 if row['EGFR mutation status'] == 'Mutant' else 0
           exam_results = os.path.join(image_folder, patient_id, self.builder_config.img_type) # pytype: disable=attribute-error
@@ -130,42 +101,44 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
             
             image_file_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_image.nrrd')
             label_base_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_segmentation')
+            
             label_file_path = None
             mask_exam = None
             nrrd_mask = False
+            
             if os.path.exists(label_base_path + '.nrrd'):
               label_file_path = label_base_path + '.nrrd'
               mask_exam, _ = nrrd.read(label_file_path)
               nrrd_mask = True
             elif os.path.exists(label_base_path + '.dcm'):
+              dcm_patients.append(patient_id)
+              
               label_file_path = label_base_path + '.dcm'
               mask_exam = pydicom.dcmread(label_file_path).pixel_array
               mask_exam = np.moveaxis(mask_exam, 0, 2)
             
             data_exam, _ = nrrd.read(image_file_path)
 
-
-            # Extrae solo los las imagenes  los niveles que contienen segmentacion
-            cut_data_exam, cut_mask_exam = extractImages(data_exam, mask_exam)
-            
-            for i in range(cut_data_exam.shape[2]):
-              data_exam_i = cut_data_exam[:,:,i].astype(np.float32)
-              data_exam_i = np.rot90(data_exam_i, k=3)
-              data_exam_i = np.fliplr(data_exam_i)
-                
-              mask_exam_i = cut_mask_exam[:,:,i].astype(np.int32)
-              if nrrd_mask:
-                # nrrd files
-                mask_exam_i = np.rot90(mask_exam_i, k=3)
-                mask_exam_i = np.fliplr(mask_exam_i)
+            for i in range(data_exam.shape[2]):
+              data_exam_i = data_exam[:,:,i].astype(np.float32)
+              mask_exam_i = mask_exam[:,:,i].astype(np.int32)
+              
+              if np.max(mask_exam_i) > 0:
+                data_exam_i = np.rot90(data_exam_i, k=3)
+                data_exam_i = np.fliplr(data_exam_i)
+               
+                if nrrd_mask:
+                  # nrrd files
+                  mask_exam_i = np.rot90(mask_exam_i, k=3)
+                  mask_exam_i = np.fliplr(mask_exam_i)
 
     
-              # Create a unique key using the patient_id and the index of the loop
-              example_key = f'{patient_id}_{i}'
+                # Create a unique key using the patient_id and the index of the loop
+                example_key = f'{patient_id}_{i}'
 
-              yield example_key, {
+                yield example_key, {
                   'patient_id': patient_id,
                   'img_exam': data_exam_i,
                   'mask_exam': mask_exam_i,
                   'label': label_value,
-              }
+                }  

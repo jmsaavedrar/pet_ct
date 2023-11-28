@@ -12,43 +12,8 @@ import nrrd
 import csv
 import random
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import cv2
-from tqdm import trange
 from pathlib import Path
 from dataclasses import dataclass
-
-
-def extractImages(data_img, data_mask):
-
-    """
-  Función que extrae sólo las imágenes de los niveles que contienen segmentación.
-  INPUT: volumen de imágenes y máscaras numpy array 3D (numero de imagen, alto, ancho), directo de la
-  carga del archivo .nrrd.
-  Busca las máscaras con segmentaciones y extrae los cortes de estos niveles.
-  OUTPUT: devuelve np.array 3D con las imágenes y máscaras sólo de los niveles del tumor.
-    """
-
-    images = []
-    masks = []
-    positive_slices = []
-
-    for i in trange(data_img.shape[2]):
-        segmentation = data_mask[:,:,i]
-        if (np.sum(segmentation)>0):
-            positive_slices.append(i)
-
-        ## Extrae las imágenes sólo con segmentación - tumor
-    for axial in positive_slices:
-        segment = data_mask[:,:,axial]
-        ct = data_img[:,:,axial]
-        images.append(ct)
-        masks.append(segment)
-
-    images = np.stack(images, axis=2)
-    masks = np.stack(masks, axis=2)
-    return(images, masks)
 
 
 @dataclass
@@ -138,21 +103,23 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
             data_exam, _ = nrrd.read(image_file_path)
             mask_exam, _ = nrrd.read(label_file_path)
             
-            # Extrae solo los las imagenes  los niveles que contienen segmentacion
-            cut_data_exam, cut_mask_exam = extractImages(data_exam, mask_exam)
-            print(cut_data_exam.shape, cut_mask_exam.shape)
-            # Convierte el dtype de las imagenes a uint8
-            #cut_data_roi = cut_data_roi.astype(np.uint16)
-            for i in range(cut_data_exam.shape[2]):
-              data_exam_i = cut_data_exam[:,:,i].astype(np.float32)
-              mask_exam_i = cut_mask_exam[:,:,i].astype(np.int32)
+            for i in range(data_exam.shape[2]):
+              data_exam_i = data_exam[:,:,i].astype(np.float32)
+              mask_exam_i = mask_exam[:,:,i].astype(np.int32)
+              
+              if np.max(mask_exam_i) > 0:
+                data_exam_i = np.rot90(data_exam_i, k=3)
+                data_exam_i = np.fliplr(data_exam_i)  
+              
+                mask_exam_i = np.rot90(mask_exam_i, k=3)
+                mask_exam_i = np.fliplr(mask_exam_i)
 
-              # Create a unique key using the patient_id and the index of the loop
-              example_key = f'{patient_id}_{i}'
+                # Create a unique key using the patient_id and the index of the loop
+                example_key = f'{patient_id}_{i}'
 
-              yield example_key, {
-                  'patient_id': patient_id,
-                  'img_exam': data_exam_i,
-                  'mask_exam': mask_exam_i,
-                  'label': row['EGFR'],
-              }
+                yield example_key, {
+                    'patient_id': patient_id,
+                    'img_exam': data_exam_i,
+                    'mask_exam': mask_exam_i,
+                    'label': row['EGFR'],
+                }
