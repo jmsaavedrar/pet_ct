@@ -11,12 +11,13 @@ Para manejar las dependencias necesarias para correr los códigos, en primer lug
 conda create -n "myenv" python=3.8.12
 ```
 
-A continuacion instalar *requirements.txt* que se refiere a las dependencias necesarias:
+A continuacion crear ambiente virtual con el archivo de *environment.yml*.
 
 ```
-conda activate myenv
-conda install --file requirements.txt
+conda create --name myenv --file environment.yml
 ```
+
+
 
 Los ambientes de conda se activan y desactivan, respectivamente, de la siguiente forma:
 
