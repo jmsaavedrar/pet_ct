@@ -32,9 +32,8 @@ def check_data(data) :
 
 
 def map_fun(image, label) :    
-    
     #TODO 
-    crop_size = 256    
+    #crop_size = 256    
     image = (image - min_val)/ val_range
     image = tf.image.grayscale_to_rgb(image)
     size = int(crop_size * 1.15)

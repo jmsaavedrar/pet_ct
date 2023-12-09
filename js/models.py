@@ -31,8 +31,8 @@ def simple_model(shape) :
     x = tf.keras.layers.GlobalAveragePooling2D()(x)    
     x = tf.keras.layers.Dense(256, activation = 'relu', kernel_regularizer = tf.keras.regularizers.L2())(x)
     x = tf.keras.layers.Dense(128, activation = 'relu', kernel_regularizer = tf.keras.regularizers.L2())(x)
-    #x = tf.keras.layers.Dense(1, activation = 'sigmoid')(x)
-    x = tf.keras.layers.Dense(2, activation = 'softmax')(x)
+    x = tf.keras.layers.Dense(1, activation = 'sigmoid')(x)
+    #x = tf.keras.layers.Dense(2, activation = 'softmax')(x)
     model = tf.keras.models.Model(inputs = x_input, outputs = x)
     
     return model
