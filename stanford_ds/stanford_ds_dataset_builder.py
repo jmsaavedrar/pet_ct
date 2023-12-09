@@ -47,6 +47,10 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                                           doc = 'Tumor Mask'),
           'label': tfds.features.ClassLabel(num_classes=2, 
                                             doc='Results on the EGFR Mutation test.'),
+          'pet_liver': tfds.features.Tensor(shape=(None,), 
+                                              dtype=np.uint16, 
+                                              encoding='zlib', 
+                                              doc='Liver PET Images'),
       }),
       supervised_keys=None,  # Set to `None` to disable
       disable_shuffling=False,
@@ -101,6 +105,8 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
             
             image_file_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_image.nrrd')
             label_base_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_segmentation')
+            pet_liver_path = os.path.join(image_folder, "Liver_pet", f'{patient_id}_pet_liver.nrrd')
+
             
             label_file_path = None
             mask_exam = None
@@ -118,6 +124,11 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
               mask_exam = np.moveaxis(mask_exam, 0, 2)
             
             data_exam, _ = nrrd.read(image_file_path)
+            pet_liver_exam = pet_liver_exam = np.array([], dtype=np.uint16)
+              
+            if self.builder_config.img_type == 'pet':
+              pet_liver_exam, _ = nrrd.read(pet_liver_path)
+              pet_liver_exam = pet_liver_exam.flatten()
 
             for i in range(data_exam.shape[2]):
               data_exam_i = data_exam[:,:,i].astype(np.float32)
@@ -141,4 +152,5 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                   'img_exam': data_exam_i,
                   'mask_exam': mask_exam_i,
                   'label': label_value,
+                  'pet_liver': pet_liver_exam,
                 }  

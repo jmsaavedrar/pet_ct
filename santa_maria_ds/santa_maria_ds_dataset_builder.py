@@ -59,6 +59,11 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
                                             doc = 'Tumor Mask'),
             'label': tfds.features.ClassLabel(num_classes=2, 
                                               doc='Results on the EGFR Mutation test.'),
+            'pet_liver': tfds.features.Tensor(shape=(None,), 
+                                              dtype=np.uint16, 
+                                              encoding='zlib', 
+                                              doc='Liver PET Images'),
+
         }),
         supervised_keys=None,  # Set to `None` to disable
         disable_shuffling=False,
@@ -97,29 +102,37 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
 
           image_file_path = os.path.join(results_folder, "image", f'{patient_id}_{self.builder_config.img_type}_image.nrrd')
           label_file_path = os.path.join(results_folder, "label", f'{patient_id}_{self.builder_config.img_type}_segmentation.nrrd')
-          
+          pet_liver_path = os.path.join(path, "PET Liver ROI", f'{patient_id}_pet_liver.nrrd')
+        
           # Revisa si la imagen y el label existen antes de retornarlos
           if os.path.exists(image_file_path) and os.path.exists(label_file_path):
             data_exam, _ = nrrd.read(image_file_path)
             mask_exam, _ = nrrd.read(label_file_path)
+
+            pet_liver_exam = pet_liver_exam = np.array([], dtype=np.uint16)
+            if self.builder_config.img_type == 'pet':
+              pet_liver_exam, _ = nrrd.read(pet_liver_path)
+              pet_liver_exam = pet_liver_exam.flatten()
+                
             
             for i in range(data_exam.shape[2]):
               data_exam_i = data_exam[:,:,i].astype(np.float32)
               mask_exam_i = mask_exam[:,:,i].astype(np.int32)
-              
+                
               if np.max(mask_exam_i) > 0:
                 data_exam_i = np.rot90(data_exam_i, k=3)
                 data_exam_i = np.fliplr(data_exam_i)  
-              
+                    
                 mask_exam_i = np.rot90(mask_exam_i, k=3)
                 mask_exam_i = np.fliplr(mask_exam_i)
-
+        
                 # Create a unique key using the patient_id and the index of the loop
                 example_key = f'{patient_id}_{i}'
-
+        
                 yield example_key, {
-                    'patient_id': patient_id,
-                    'img_exam': data_exam_i,
-                    'mask_exam': mask_exam_i,
-                    'label': row['EGFR'],
+                  'patient_id': patient_id,
+                  'img_exam': data_exam_i,
+                  'mask_exam': mask_exam_i,
+                  'label': row['EGFR'],
+                  'pet_liver': pet_liver_exam,
                 }
