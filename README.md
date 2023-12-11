@@ -69,6 +69,11 @@ dataset = ds['R01-001']                            # obtiene todos los datos del
 El archivo *load_datasets_example.ipynb* realiza un ejemplo de como construir *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje.
 
 ---
+## Entrenar modelos base
+
+Los modelos base 
+
+---
 
 ## Modificación de los datos
 Para modificar el conjunto de datos de *tensorflow_datasets*, en primer lugar es necesario pedir el acceso a los datos *'Data Clinica Santa Maria'* y *'Data NSCLC Radiogenomics'* a Hector Henriquez. 

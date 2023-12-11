@@ -60,7 +60,7 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
     stanford_patients = list(stanford_info.splits.keys())
     santa_maria_patients = list(santa_maria_info.splits.keys())
 
-    def generate_data(patient_ids):
+    def generate_data(dataset, patient_ids):
         for patient_id in patient_ids:
             patient_data = dataset[patient_id]
             for data in patient_data:
@@ -82,7 +82,7 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
                 yield imm, data['label']
         
     stanford_data = tf.data.Dataset.from_generator(
-	lambda: generate_data(stanford_patients),
+	lambda: generate_data(stanford_dataset, stanford_patients),
 	output_signature=(
 	    tf.TensorSpec(shape=(img_size, img_size, 1), dtype=tf.float32, name="imagen"),
 	    tf.TensorSpec(shape=(), dtype=tf.int64, name="label")
@@ -90,7 +90,7 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
     )
     
     santa_maria_data = tf.data.Dataset.from_generator(
-	lambda: generate_data(santa_maria_patients),
+	lambda: generate_data(santa_maria_dataset, santa_maria_patients),
 	output_signature=(
 	    tf.TensorSpec(shape=(img_size, img_size, 1), dtype=tf.float32, name="imagen"),
 	    tf.TensorSpec(shape=(), dtype=tf.int64, name="label")
@@ -99,7 +99,7 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
 
 	
 
-    return fold_datasets
+    return stanford_data, santa_maria_data
 
 def construir_modelo(img_size, train_steps):
     modelo = models.simple_model((img_size, img_size, 3))
@@ -125,8 +125,6 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=None, help="Semilla aleatoria para reproducibilidad")
 
     args = parser.parse_args()
-    
-    ds_arg = args.dataset
     
     if args.particion not in ['pet', 'ct', 'chest_ct']: raise ValueError('Partición no válida, debe ser pet, ct o chest_ct')
     
