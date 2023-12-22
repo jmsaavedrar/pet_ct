@@ -53,8 +53,8 @@ def extract_roi(image, mask, margin):
 
 def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch_size=32, shuffle_buffer_size=1000, random_seed=None):
     # Cargar el conjunto de datos desde TensorFlow Datasets
-    stanford_dataset, stanford_info =  tfds.load(f'stanford_dataset/{img_type}', with_info=True)
-    santa_maria_dataset, santa_maria_info =  tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True)
+    stanford_dataset, stanford_info =  tfds.load(f'stanford_dataset/{img_type}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
+    santa_maria_dataset, santa_maria_info =  tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
 
     # Get the split keys (splits) of the dataset
     stanford_patients = list(stanford_info.splits.keys())
@@ -69,9 +69,9 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
                 
                 # roi value to standarize the image slice
                 if img_type == 'pet':
-                    liver_roi_val = tf.cast(tf.reduce_sum(data['pet_liver']), dtype=tf.float32)/619.0
-                    if liver_roi_val == 0: liver_roi_val = 1
+                    liver_roi_val = tf.cast(tf.reduce_mean(data['pet_liver']), dtype=tf.float32)
                     img_exam  = img_exam / liver_roi_val
+                    
                 #img_exam = tf.where(img_exam < min_val, min_val, img_exam)
                 #img_exam = tf.where(img_exam > max_val, max_val, img_exam)
                 #img_exam = (img_exam - min_val)/ val_range                 

@@ -4,8 +4,8 @@ from pathlib import Path
 from radiomics import featureextractor
 
 # Parameters
-archive_path = '/home/roberto/Desktop/lung_radiomics/pet_ct/santa_maria_ds/santa_maria_data'
-binwidth = 20
+archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/santa_maria_data'
+binwidth = 10
 sigma = [1, 2, 3]
 exam_types = ['body', 'pet', 'torax3d']
 

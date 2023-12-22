@@ -28,7 +28,7 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
 
   BUILDER_CONFIGS = [
       ExamConfig(name=f'{type}', description=f'Resultados de tomografia {type.upper()}', img_type=type)
-      for type in ['chest_ct', 'pet', 'ct']
+      for type in ['pet', 'chest_ct', 'ct']
   ]
 
   def _info(self) -> tfds.core.DatasetInfo:
@@ -48,9 +48,21 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
           'label': tfds.features.ClassLabel(num_classes=2, 
                                             doc='Results on the EGFR Mutation test.'),
           'pet_liver': tfds.features.Tensor(shape=(None,), 
-                                              dtype=np.uint16, 
+                                              dtype=np.float32, 
                                               encoding='zlib', 
                                               doc='Liver PET Images'),
+                                              'exam_metadata': tfds.features.FeaturesDict({
+          'space_directions':  tfds.features.Tensor(shape=(3,), 
+                                              dtype=np.float64, 
+                                              encoding='zlib', 
+                                              doc='space directions of exam'),
+
+          'space_origin': tfds.features.Tensor(shape=(3,), 
+                                              dtype=np.float64, 
+                                              encoding='zlib', 
+                                              doc='space origin of exam'),
+
+          })
       }),
       supervised_keys=None,  # Set to `None` to disable
       disable_shuffling=False,
@@ -106,7 +118,6 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
             image_file_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_image.nrrd')
             label_base_path = os.path.join(exam_results, f'{patient_id}_{self.builder_config.img_type}_segmentation')
             pet_liver_path = os.path.join(image_folder, "Liver_pet", f'{patient_id}_pet_liver.nrrd')
-
             
             label_file_path = None
             mask_exam = None
@@ -123,12 +134,18 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
               mask_exam = pydicom.dcmread(label_file_path).pixel_array
               mask_exam = np.moveaxis(mask_exam, 0, 2)
             
-            data_exam, _ = nrrd.read(image_file_path)
+            data_exam, header = nrrd.read(image_file_path)
             pet_liver_exam = pet_liver_exam = np.array([], dtype=np.uint16)
               
+            
+            masked_liver_data = np.array([], dtype=np.float32)
             if self.builder_config.img_type == 'pet':
-              pet_liver_exam, _ = nrrd.read(pet_liver_path)
-              pet_liver_exam = pet_liver_exam.flatten()
+              pet_liver_mask, _ = nrrd.read(pet_liver_path)
+              # Masking using boolean indexing
+              
+              masked_liver_data = np.where(pet_liver_mask >= 1, data_exam, 0)
+              masked_liver_data = masked_liver_data.flatten().astype(np.float32)
+              print('type of masked liver data:', masked_liver_data.dtype)
 
             for i in range(data_exam.shape[2]):
               data_exam_i = data_exam[:,:,i].astype(np.float32)
@@ -152,5 +169,9 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                   'img_exam': data_exam_i,
                   'mask_exam': mask_exam_i,
                   'label': label_value,
-                  'pet_liver': pet_liver_exam,
-                }  
+                  'pet_liver': masked_liver_data,
+                  'exam_metadata': {'space_directions': np.diag(header['space directions']),
+                                    'space_origin': header['space origin']}
+                
+                }
+                  

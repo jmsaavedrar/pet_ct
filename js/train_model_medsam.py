@@ -27,7 +27,7 @@ initial_learning_rate = 0.001
 epochs = 20
 alpha = 0.00001
 
-# cargar_encoder
+# cargar encoder
 def cargar_encoder():
     model_path = r'medsam_encoder_2.pth'
 
@@ -46,11 +46,8 @@ def cargar_encoder():
         # If CUDA is not available, load the model to the i
         model.load_state_dict(torch.load(model_path, map_location='cpu'))
 
-    model.eval()
+    model.train()
     return model
-
-# Inicializar codificador
-encoder = cargar_encoder()
 
 # Map function
 
@@ -96,10 +93,10 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
                 mask_exam = data['mask_exam']
                 img_exam = data['img_exam']
 
+                # roi value to standarize the image slice
                 if img_type == 'pet':
-                    liver_roi_val = tf.cast(tf.reduce_sum(data['pet_liver']), dtype=tf.float32) / 619.0
-                    if liver_roi_val == 0: liver_roi_val = 1
-                    img_exam = img_exam / liver_roi_val
+                    liver_roi_val = tf.cast(tf.reduce_mean(data['pet_liver']), dtype=tf.float32)
+                    img_exam  = img_exam / liver_roi_val
 
                 data_roi = extract_roi(img_exam, mask_exam, margin)
                 data_roi = tf.expand_dims(data_roi, -1)
@@ -125,20 +122,45 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
 
     return stanford_data, santa_maria_data
 
+
+# Define el modelo completo
+class fcModel(nn.Module):
+    def __init__(self, encoder_model, fc_input_size):
+        super(CustomModel, self).__init__()
+        self.encoder_model = encoder_model
+        self.fc = nn.Linear(fc_input_size, 1)  # 1 salida para clasificación binaria
+
+    def forward(self, x):
+        # Obtén las características de la red principal
+        features = self.encoder_model(x)
+
+        # Aplana las características
+        features = features.view(features.size(0), -1)
+
+        # Pasa las características a través de la red completamente conectada
+        output = self.fc(features)
+
+        return output
+
+
+
 # Construir modelo function
 def construir_modelo(img_size, train_steps):
-    modelo = models.medsam_fc_model((img_size))
+    # Inicializar codificador
+    modelo = fcModel(cargar_encoder())
+    # utilizar dimensionalidad de fc_input_size para la dimensionalidad del vector del encoder
 
-    cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, decay_steps=train_steps, alpha=alpha)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=cosdecay)
+    # Definir la tasa de aprendizaje
+    cosdecay = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_steps, eta_min=0)
 
-    modelo.compile(
-        optimizer=optimizer,
-        loss=tf.keras.losses.BinaryFocalCrossentropy(),
-        metrics=['accuracy', AUC(name='auc', curve='PR'), metrics.true_positive, metrics.false_positive]
-    )
+    # Definir el optimizador
+    optimizer = optim.Adam(modelo.parameters(), lr=initial_learning_rate)
 
-    return modelo
+    # Definir la función de pérdida
+    criterion = nn.BCEWithLogitsLoss()
+
+    # Devolver el modelo, el optimizador y la función de pérdida
+    return modelo, optimizer, criterion
 
 
 if __name__ == "__main__":

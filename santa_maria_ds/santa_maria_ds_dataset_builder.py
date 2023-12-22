@@ -5,6 +5,7 @@
 # hacer clases balanceadas
 # que todas las clases de una misma persona se encuentren en el conjunto de entrenamiento, o en el de testeo
 
+# agregar el spacing de las imágenes construidas
 
 import tensorflow_datasets as tfds
 import os
@@ -60,9 +61,21 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
             'label': tfds.features.ClassLabel(num_classes=2, 
                                               doc='Results on the EGFR Mutation test.'),
             'pet_liver': tfds.features.Tensor(shape=(None,), 
-                                              dtype=np.uint16, 
+                                              dtype=np.float32, 
                                               encoding='zlib', 
                                               doc='Liver PET Images'),
+             'exam_metadata': tfds.features.FeaturesDict({
+                 'space_directions':  tfds.features.Tensor(shape=(3,), 
+                                              dtype=np.float64, 
+                                              encoding='zlib', 
+                                              doc='space directions of exam'),
+
+                 'space_origin': tfds.features.Tensor(shape=(3,), 
+                                              dtype=np.float64, 
+                                              encoding='zlib', 
+                                              doc='space origin of exam'),
+
+             })
 
         }),
         supervised_keys=None,  # Set to `None` to disable
@@ -78,7 +91,7 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
     if self.builder_config.img_type == 'pet': exam_name = 'PET_SEG'
 
      # Carpeta donde la data se encuentra
-    archive_path = 'santa_maria_data/'
+    archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/santa_maria_data/'
 
     final_patients = []
     data_file = Path(os.path.join(archive_path, 'santamaria_data.csv'))
@@ -106,13 +119,18 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
         
           # Revisa si la imagen y el label existen antes de retornarlos
           if os.path.exists(image_file_path) and os.path.exists(label_file_path):
-            data_exam, _ = nrrd.read(image_file_path)
+            data_exam, header = nrrd.read(image_file_path)
             mask_exam, _ = nrrd.read(label_file_path)
+            # _ devuelve los metadatos, retornar, modificar código
+            
 
-            pet_liver_exam = pet_liver_exam = np.array([], dtype=np.uint16)
+            masked_liver_data = np.array([], dtype=np.float32)
             if self.builder_config.img_type == 'pet':
-              pet_liver_exam, _ = nrrd.read(pet_liver_path)
-              pet_liver_exam = pet_liver_exam.flatten()
+              pet_liver_mask, _ = nrrd.read(pet_liver_path)
+              # Masking using boolean indexing
+              
+              masked_liver_data = np.where(pet_liver_mask >= 1, data_exam, 0)
+              masked_liver_data = masked_liver_data.flatten()
                 
             
             for i in range(data_exam.shape[2]):
@@ -134,5 +152,7 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
                   'img_exam': data_exam_i,
                   'mask_exam': mask_exam_i,
                   'label': row['EGFR'],
-                  'pet_liver': pet_liver_exam,
+                  'pet_liver': masked_liver_data,
+                  'exam_metadata': {'space_directions': np.diag(header['space directions']),
+                                    'space_origin': header['space origin']}
                 }
