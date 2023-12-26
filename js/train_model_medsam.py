@@ -16,6 +16,7 @@ import metrics
 import models
 import numpy as np
 from segment_anything import sam_model_registry
+from sklearn.metrics import accuracy_score, roc_auc_score, confusion_matrix
 
 
 
@@ -27,26 +28,18 @@ initial_learning_rate = 0.001
 epochs = 20
 alpha = 0.00001
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Como se entrena el modelo: ", device)
+
 # cargar encoder
 def cargar_encoder():
     model_path = r'medsam_encoder_2.pth'
 
-    # Check if CUDA is available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(device)
-
     # Load the model
     model = sam_model_registry['vit_b']()
+    # If CUDA is not available, load the model to the i
+    model.load_state_dict(torch.load(model_path, map_location=device))
     
-    # If CUDA is available, load the model to the GPU using model.load_state_dict
-    if torch.cuda.is_available():
-        model.load_state_dict(torch.load(model_path))
-        model = model.to(device)
-    else:
-        # If CUDA is not available, load the model to the i
-        model.load_state_dict(torch.load(model_path, map_location='cpu'))
-
-    model.train()
     return model
 
 # Map function
@@ -125,14 +118,15 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
 
 # Define el modelo completo
 class fcModel(nn.Module):
-    def __init__(self, encoder_model, fc_input_size):
-        super(CustomModel, self).__init__()
+    def __init__(self, encoder_model):
+        super(fcModel, self).__init__()
         self.encoder_model = encoder_model
-        self.fc = nn.Linear(fc_input_size, 1)  # 1 salida para clasificación binaria
+        self.fc = nn.Linear(128, 1)  # 1 salida parxa clasificación binaria
 
     def forward(self, x):
         # Obtén las características de la red principal
         features = self.encoder_model(x)
+        print('features shape:', features.shape)
 
         # Aplana las características
         features = features.view(features.size(0), -1)
@@ -142,31 +136,88 @@ class fcModel(nn.Module):
 
         return output
 
+def train_one_epoch(model, optimizer, criterion, epoch_index, training_loader):
+    running_loss = 0.
+    last_loss = 0.
+
+    # Here, we use enumerate(training_loader) instead of
+    # iter(training_loader) so that we can track the batch
+    # index and do some intra-epoch reporting
+    for i, data in enumerate(training_loader):
+        # Every data instance is an input + label pair
+        inputs, labels = data
+        inputs = torch.as_tensor(inputs, device=device)
+        labels = torch.as_tensor(labels, device=device)
+
+        # Zero your gradients for every batch!
+        optimizer.zero_grad()
+
+        # Make predictions for this batch
+        outputs = model(inputs)
+
+        # Compute the loss and its gradients
+        loss = criterion(outputs, labels)
+        loss.backward()
+
+        # Adjust learning weights
+        optimizer.step()
+
+        # Gather data and report
+        running_loss += loss.item()
+        if i % 100 == 99:
+            last_loss = running_loss / 100 # loss per batch
+            print('  batch {} loss: {}'.format(i + 1, last_loss))
+            tb_x = epoch_index * len(training_loader) + i + 1
+            running_loss = 0.
+
+    return last_loss
+
 
 
 # Construir modelo function
-def construir_modelo(img_size, train_steps):
+def construir_modelo(img_size, lr, train_steps):
     # Inicializar codificador
-    modelo = fcModel(cargar_encoder())
+    encoder = cargar_encoder()
+    modelo = fcModel(encoder)
     # utilizar dimensionalidad de fc_input_size para la dimensionalidad del vector del encoder
 
-    # Definir la tasa de aprendizaje
-    cosdecay = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_steps, eta_min=0)
-
     # Definir el optimizador
-    optimizer = optim.Adam(modelo.parameters(), lr=initial_learning_rate)
+    parameters = filter(lambda p: p.requires_grad, modelo.parameters())
+    optimizer = optim.Adam(parameters, lr=lr)
+
+    # Definir la tasa de aprendizaje
+    #cosdecay = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_steps, eta_min=0)
 
     # Definir la función de pérdida
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.BCELoss()
 
     # Devolver el modelo, el optimizador y la función de pérdida
     return modelo, optimizer, criterion
 
 
+
+def calculate_metrics(predictions, targets):
+    # Convert predictions to binary values (0 or 1)
+    binary_predictions = torch.round(torch.sigmoid(predictions)).long()
+
+    # Calculate metrics
+    accuracy = accuracy_score(targets.cpu().numpy(), binary_predictions.cpu().numpy())
+    auc = roc_auc_score(targets.cpu().numpy(), torch.sigmoid(predictions).cpu().numpy())
+
+    # Calculate confusion matrix
+    cm = confusion_matrix(targets.cpu().numpy(), binary_predictions.cpu().numpy())
+    true_positives = cm[1, 1]
+    false_negatives = cm[1, 0]
+
+    return accuracy, auc, true_positives, false_negatives
+
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Entrenar un modelo en el conjunto de datos de Santa Maria.")
     parser.add_argument("-p", "--particion", type=str, default="chest_ct", help="Tipo de partición (pet, body o torax3d)")
-    parser.add_argument("-b", "--batch", type=int, default=8x	x	, help="Tamaño del lote para entrenamiento")
+    parser.add_argument("-b", "--batch", type=int, default=100, help="Tamaño del lote para entrenamiento")
     parser.add_argument("-s", "--size", type=int, default=1024, help="Tamaño de la imagen para extracción de ROI")
     parser.add_argument("-e", "--epochs", type=int, default=10, help="Número de épocas para entrenamiento")
     parser.add_argument("--seed", type=int, default=None, help="Semilla aleatoria para reproducibilidad")
@@ -192,82 +243,48 @@ if __name__ == "__main__":
 
     train_ds, test_ds = train_test_dataset
     
-    train_ds = train_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE)
-    test_ds = test_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE)
+    train_ds = tfds.as_numpy(train_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
+    test_ds = tfds.as_numpy(test_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
     
     # Construir el modelo
-    #modelo = construir_modelo(args.size, train_steps)
-    
+    model, optimizer, criterion = construir_modelo(args.size, 0.001, train_steps)
     
     for epoch in range(args.epochs):
         print(f"Epoch {epoch + 1}/{args.epochs}")
+
+        model.train(True)
+        avg_loss = train_one_epoch(model, optimizer, criterion, epoch, train_ds)
+
+        model.eval()
+
+        all_predictions = []
+        all_targets = []
+
+        with torch.no_grad():
+            for inputs, labels in enumerate(test_ds):
+                
+                # Every data instance is an input + label pair
+                inputs, labels = data
+                inputs = torch.as_tensor(inputs, device=device)
+                labels = torch.as_tensor(labels, device=device)
+
+                outputs = model(inputs)
+
+                # Store predictions and targets for later calculation of metrics
+                all_predictions.append(outputs)
+                all_targets.append(labels)
+
+        # Concatenate predictions and targets for the entire dataset
+        all_predictions = torch.cat(all_predictions)
+        all_targets = torch.cat(all_targets)
+
+        # Calculate metrics
+        accuracy, auc, true_positives, false_negatives = calculate_metrics(all_predictions, all_targets)
         
-        # Training loop
-        for batch in train_ds:
-            images, labels = batch
-            # Train your model here using images and labels
-            image_np = images.numpy()
-        
-            # Convert NumPy array to PyTorch tensor
-            image_torch = torch.tensor(image_np, dtype=torch.float32)
-            
-            # If CUDA is available, load the model to the GPU using model.load_state_dict
-            if torch.cuda.is_available(): image_torch=image_torch.cuda() 
-            else: image_torch = image_torch.cpu()
-            
-            print(image_torch.shape)
-            # Pass through the PyTorch encoder
-            with torch.no_grad():
-                features_tensor = encoder.image_encoder(image_torch)
-            
-            # Convert PyTorch features back to NumPy array
-            features_np = features_tensor.squeeze().detach().numpy()
-            print('shape of feature tensor: ', features_np.shape)
-            
-            # Convert NumPy array to TensorFlow tensor
-            features_tensorflow = tf.convert_to_tensor(features_np)
-	    
-	    
-	    
+        print("Resultados de testeo")
+        print()
 
-    # Validation loop
-    for batch in test_ds:
-        images, labels = batch
-        # Evaluate your model here using images and labels
-        # ...
-
-   
-
-
-
-	
-    # Entrenar el modelo
-    history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds)
-
-    # Save metrics for training dataset
-    train_metrics = modelo.evaluate(train_ds)
-    train_accuracy, train_auc, train_true_positive, train_false_positive = train_metrics[1:5]
-
-    # Save metrics for testing dataset
-    test_metrics = modelo.evaluate(test_ds)
-    test_accuracy, test_auc, test_true_positive, test_false_positive = test_metrics[1:5]
-
-    # Replace NaN values with 0
-    test_accuracy = 0 if np.isnan(test_accuracy) else test_accuracy
-    test_auc = 0 if np.isnan(test_auc) else test_auc
-    test_true_positive = 0 if np.isnan(test_true_positive) else test_true_positive
-    test_false_positive = 0 if np.isnan(test_false_positive) else test_false_positive
-    
-     # Print test metrics
-    print("Resultados")
-    print()
-    print(f"Train Accuracy: {train_accuracy}")
-    print(f"Train AUC: {train_auc}")
-    print(f"Train True Positive: {train_true_positive}")
-    print(f"Train False Positive: {train_false_positive}")
-    print("-------------------------------------------")
-    print(f"Test Accuracy: {test_accuracy}")
-    print(f"Test AUC: {test_auc}")
-    print(f"Test True Positive: {test_true_positive}")
-    print(f"Test False Positive: {test_false_positive}")
+        # Print or store the metrics as needed
+        print(f'Accuracy: {accuracy}, AUC: {auc}, True Positives: {true_positives}, False Negatives: {false_negatives}')
+        print()
 
