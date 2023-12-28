@@ -5,16 +5,24 @@ from radiomics import featureextractor
 
 # Parameters
 archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/santa_maria_data'
-binwidth = 10
+binwidth = 5
 sigma = [1, 2, 3]
 exam_types = ['body', 'pet', 'torax3d']
+normalize = True
 
 # Radiomics feature extractor
-settings = {'binWidth': binwidth, 'sigma': sigma}
+settings = {'binWidth': binwidth, 'sigma': sigma, 'normalize':normalize}
 extractor = featureextractor.RadiomicsFeatureExtractor(**settings)
 
+#extractor.enableImageTypeByName('Original')
+#extractor.enableImageTypeByName('Wavelet')
+#extractor.enableImageTypeByName('LoG')
+#extractor.enableImageTypeByName('Square')
+#extractor.enableImageTypeByName('SquareRoot')
+#extractor.enableImageTypeByName('Logarithm')
+#extractor.enableImageTypeByName('Exponential')
 # Output file path
-output_file_path = f'santamaria_data_all__binwidth_{binwidth}_sigma_{sigma}.csv')
+output_file_path = Path(f'santamaria_data_all__binwidth_{binwidth}_sigma_{sigma}_normalize_{normalize}.csv')
 
 # Get fieldnames from feature map
 image = Path(archive_path, 'EGFR+', 'body', "image", 'sm_001_body_image.nrrd')
@@ -59,4 +67,4 @@ with output_file_path.open('w', newline='') as output_file:
             # Write the updated row to the new CSV file
             writer.writerow(row)
 
-print("CSV file with features for all exam types created successfully.")
+print("CSV file with features for all exam types created successfully at ", str(output_file_path))

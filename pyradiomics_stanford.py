@@ -5,12 +5,15 @@ from radiomics import featureextractor
 
 # Parameters
 archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/stanford_data/'
-binwidth = 20
+binwidth = 5
 sigma = [1, 2, 3]
-exam_types = ['chest_ct', 'pet', 'ct']
+exam_types = ['body', 'pet', 'torax3d']
+imageTypes = ['Original']
+normalize = True
+
 
 # Radiomics feature extractor
-settings = {'binWidth': binwidth, 'sigma': sigma}
+settings = {'binWidth': binwidth, 'sigma': sigma, 'imageType':imageTypes, 'normalize':normalize}
 extractor = featureextractor.RadiomicsFeatureExtractor(**settings, geometryTolerance=0.1)
 extractor2 = featureextractor.RadiomicsFeatureExtractor(**settings, geometryTolerance=0.1, label = 255)
 
@@ -45,17 +48,14 @@ with output_file_path.open('w', newline='') as output_file:
             patient_id = row['Case ID']
 
             for exam_type in exam_types:
-                exam_name = {'chest_ct': 'chest_ct_image', 'ct': 'ct_image', 'pet':'pet_image'}[exam_type]
-                segmentation_name = {'chest_ct': 'chest_ct_segmentation', 'ct': 'ct_segmentation', 'pet':'pet_segmentation'}[exam_type]
+                exam_name = {'torax3d': 'chest_ct_image', 'body': 'ct_image', 'pet':'pet_image'}[exam_type]
+                segmentation_name = {'torax3d': 'chest_ct_segmentation', 'body': 'ct_segmentation', 'pet':'pet_segmentation'}[exam_type]
 
                 
                 if row[exam_name] == '1' and row[segmentation_name] == '1' and patient_id != 'R01-036' and patient_id != 'R01-058':
                     exam_results = os.path.join(archive_path, 'data', patient_id, exam_type)
                     image_file_path = os.path.join(exam_results, f'{patient_id}_{exam_type}_image.nrrd')
                     label_file_path = os.path.join(exam_results, f'{patient_id}_{exam_type}_segmentation.nrrd')
-                    print(image_file_path)
-                    print(label_file_path)
-                    print()
 
                     if os.path.exists(label_file_path):
                         result = None
@@ -69,4 +69,4 @@ with output_file_path.open('w', newline='') as output_file:
             # Write the updated row to the new CSV file
             writer.writerow(row)
 
-print("CSV file with features for all exam types created successfully.")
+print("CSV file with features for all exam types created successfully at: ", str(output_file_path))
