@@ -2,6 +2,7 @@ import os
 import csv
 from pathlib import Path
 from radiomics import featureextractor
+import SimpleITK as sitk
 
 # Parameters
 archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/santa_maria_data'
@@ -9,18 +10,18 @@ binwidth = 5
 sigma = [1, 2, 3]
 exam_types = ['body', 'pet', 'torax3d']
 normalize = True
+interpolator = sitk.sitkBSpline
+resampledPixelSpacing = [1,1,1]
 
 # Radiomics feature extractor
-settings = {'binWidth': binwidth, 'sigma': sigma, 'normalize':normalize}
+settings = {'binWidth': binwidth, 'sigma': sigma, 'normalize':normalize, 'interpolator': interpolator, 
+            'resampledPixelSpacing':resampledPixelSpacing}
+
 extractor = featureextractor.RadiomicsFeatureExtractor(**settings)
 
-#extractor.enableImageTypeByName('Original')
-#extractor.enableImageTypeByName('Wavelet')
-#extractor.enableImageTypeByName('LoG')
-#extractor.enableImageTypeByName('Square')
-#extractor.enableImageTypeByName('SquareRoot')
-#extractor.enableImageTypeByName('Logarithm')
-#extractor.enableImageTypeByName('Exponential')
+# By default, only original is enabled. Optionally enable some image types:
+extractor.enableImageTypes(Original={}, LoG={}, Wavelet={}, Square={}, SquareRoot={}, Logarithm={}, Exponential={})
+
 # Output file path
 output_file_path = Path(f'santamaria_data_all__binwidth_{binwidth}_sigma_{sigma}_normalize_{normalize}.csv')
 

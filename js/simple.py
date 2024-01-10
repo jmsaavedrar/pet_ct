@@ -57,6 +57,9 @@ class SimpleModel(tf.keras.Model):
 
 
 
+
+
+
 class SimpleModel2(tf.keras.Model):
     def __init__(self, number_of_classes, reg_val=0.01):
         super(SimpleModel2, self).__init__()        

@@ -2,7 +2,6 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 import numpy as np
 from sklearn.model_selection import KFold
-from simple import SimpleModel2
 from tensorflow.keras.metrics import AUC, Precision, Recall
 import argparse
 import metrics
@@ -14,7 +13,6 @@ min_val = -1000
 val_range = max_val - min_val
 margin = 3
 initial_learning_rate = 0.001
-epochs = 20
 alpha = 0.00001
 
 
@@ -65,21 +63,22 @@ def cargar_datos(dataset, img_type, n_splits=5, img_size=32, margin=5, batch_siz
         for patient_id in patient_ids:
             patient_data = dataset[patient_id]
             for data in patient_data:
-                mask_exam = data['mask_exam']
-                img_exam = data['img_exam']
+                if data['label'] != 2:
+                    mask_exam = data['mask_exam']
+                    img_exam = data['img_exam']
                 
-                # roi value to standarize the image slice
-                if img_type == 'pet':
-                    liver_roi_val = tf.cast(tf.reduce_mean(data['pet_liver']), dtype=tf.float32)
-                    img_exam  = img_exam / liver_roi_val
-                #img_exam = tf.where(img_exam < min_val, min_val, img_exam)
-                #img_exam = tf.where(img_exam > max_val, max_val, img_exam)
-                #img_exam = (img_exam - min_val)/ val_range                 
-                data_roi = extract_roi(img_exam, mask_exam, margin)                           
-                #print('{} {} {}'.format(np.min(data_roi), np.max(data_roi), data_roi.shape))
-                data_roi = tf.expand_dims(data_roi, -1)
-                imm = tf.image.resize(data_roi, (img_size, img_size))
-                yield imm, data['label']
+                    # roi value to standarize the image slice
+                    if img_type == 'pet':
+                        liver_roi_val = tf.cast(tf.reduce_mean(data['pet_liver']), dtype=tf.float32)
+                        img_exam  = img_exam / liver_roi_val
+                    #img_exam = tf.where(img_exam < min_val, min_val, img_exam)
+                    #img_exam = tf.where(img_exam > max_val, max_val, img_exam)
+                    #img_exam = (img_exam - min_val)/ val_range                 
+                    data_roi = extract_roi(img_exam, mask_exam, margin)                           
+                    #print('{} {} {}'.format(np.min(data_roi), np.max(data_roi), data_roi.shape))
+                    data_roi = tf.expand_dims(data_roi, -1)
+                    imm = tf.image.resize(data_roi, (img_size, img_size))
+                    yield imm, data['label']
 
     for i, (train_indices, test_indices) in enumerate(skf.split(patients)):
         training_patients = [patients[i] for i in train_indices]
@@ -106,23 +105,21 @@ def cargar_datos(dataset, img_type, n_splits=5, img_size=32, margin=5, batch_siz
     return fold_datasets
 
 def construir_modelo(img_size, train_steps):
-    modelo = models.simple_model((img_size, img_size, 3))
+    modelo = models.simple_model_simplest((img_size, img_size, 3))
     cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, decay_steps  = train_steps, alpha = alpha)
-    #optimizer=tf.keras.optimizers.AdamW(learning_rate = cosdecay)
-    #optimizer=tf.keras.optimizers.SGD(learning_rate = cosdecay, momentum = 0.9)
     optimizer=tf.keras.optimizers.Adam(learning_rate = cosdecay)
 
     modelo.compile(
         optimizer=optimizer,
         loss=tf.keras.losses.BinaryFocalCrossentropy(), 
-        metrics=['accuracy', AUC(name='auc', curve='PR'), metrics.true_positive, metrics.false_positive]
+        metrics=['accuracy', AUC(name='auc', curve='PR'), metrics.precision, metrics.recall]
     )
     return modelo
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Entrenar un modelo en el conjunto de datos de Santa Maria.")
-    parser.add_argument("-d", "--dataset", type=str, default="santa_maria_dataset", help="Conjunto de daatos (santa_maria_dataset o stanford_dataset)")
+    parser.add_argument("-d", "--dataset", type=str, default="santa_maria_dataset", help="Conjunto de datos (santa_maria_dataset o stanford_dataset)")
     parser.add_argument("-p", "--particion", type=str, default="torax3d", help="Tipo de partición (pet, body o torax3d)")
     parser.add_argument("-b", "--batch", type=int, default=32, help="Tamaño del lote para entrenamiento")
     parser.add_argument("-s", "--size", type=int, default=32, help="Tamaño de la imagen para extracción de ROI")
@@ -158,7 +155,7 @@ if __name__ == "__main__":
         random_seed=args.seed,
     )
 
-    train_steps = args.epochs * (1200 // args.batch)
+    train_steps = args.epochs * (1200 // args.batch)*4
 
     all_train_accuracies = []
     all_train_aucs = []
@@ -180,7 +177,9 @@ if __name__ == "__main__":
         modelo = construir_modelo(args.size, train_steps)
 
         # Entrenar el modelo
-        history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_auc', patience=5, restore_best_weights=True)
+        
+        history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds, callbacks=[early_stopping])
 
         # Save metrics for training dataset
         train_metrics = modelo.evaluate(train_ds)
@@ -205,20 +204,30 @@ if __name__ == "__main__":
         all_test_true_positives.append(test_true_positive)
         all_test_false_positives.append(test_false_positive)
 
-    # Calculate mean for all Folds
-    for i in range(len(all_test_accuracies)):
-        print(f"Fold {i} - Training Accuracy: {all_train_accuracies[i]:.3f}, \
-            Training AUC: {all_train_aucs[i]:.3f}, \
-            Training True positives: {all_train_true_positives[i]:.3f}, \
-            Training False Positives: {all_train_false_positives[i]:.3f}")
-        print()
-        print(f"Fold {i} - Test Accuracy: {all_test_accuracies[i]:.3f}, \
-            Test AUC: {all_test_aucs[i]:.3f}, \
-            Test True positives: {all_test_true_positives[i]:.3f}, \
-            Test False Positives: {all_test_false_positives[i]:.3f}")
+    # Calculate mean for all folds
+    for i, (train_ds, test_ds) in enumerate(k_fold_dataset):
+        print(f"Fold {i}:")
+    
+        # Train the model
+        modelo = construir_modelo(args.size, train_steps)
+        history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds)
+
+        # Evaluate on training dataset
+        train_accuracy, train_auc, train_precision, train_recall = modelo.evaluate(train_ds)[1:5]
+
+        # Evaluate on testing dataset
+        test_accuracy, test_auc, test_precision, test_recall = modelo.evaluate(test_ds)[1:5]
+
+        # Replace NaN values with 0
+        test_accuracy, test_auc, test_precision, test_recall = map(lambda x: 0 if np.isnan(x) else x, 
+                                                               [test_accuracy, test_auc, test_precision, test_recall])
+
+        # Print metrics for the current fold
+        print(f"Training Metrics: Accuracy: {train_accuracy:.3f}, AUC: {train_auc:.3f}, Precision: {train_precision:.3f}, Recall: {train_recall:.3f}")
+        print(f"Testing Metrics: Accuracy: {test_accuracy:.3f}, AUC: {test_auc:.3f}, Precision: {test_precision:.3f}, Recall: {test_recall:.3f}")
         print()
 
-    # Calculate mean for all Folds
+    # Calculate mean for all folds
     mean_train_accuracy = np.mean(all_train_accuracies)
     mean_train_auc = np.mean(all_train_aucs)
     mean_train_true_positive = np.mean(all_train_true_positives)
@@ -229,14 +238,6 @@ if __name__ == "__main__":
     mean_test_true_positive = np.mean(all_test_true_positives)
     mean_test_false_positive = np.mean(all_test_false_positives)
 
-    print()
-    print(f"Mean Training Accuracy: {mean_train_accuracy:.3f}")
-    print(f"Mean Training AUC: {mean_train_auc:.3f}")
-    print(f"Mean Training True Positive: {mean_train_true_positive:.3f}")
-    print(f"Mean Training False Positive: {mean_train_false_positive:.3f}")
-
-    print()
-    print(f"Mean Test Accuracy: {mean_test_accuracy:.3f}")
-    print(f"Mean Test AUC: {mean_test_auc:.3f}")
-    print(f"Mean Test True Positive: {mean_test_true_positive:.3f}")
-    print(f"Mean Test False Positive: {mean_test_false_positive:.3f}")
+# Print mean metrics
+print(f"Mean Training Metrics: Accuracy: {mean_train_accuracy:.3f}, AUC: {mean_train_auc:.3f}, Precision: {mean_train_true_positive:.3f}, Recall: {mean_train_false_positive:.3f}")
+print(f"Mean Testing Metrics: Accuracy: {mean_test_accuracy:.3f}, AUC: {mean_test_auc:.3f}, Precision: {mean_test_true_positive:.3f}, Recall: {mean_test_false_positive:.3f}")
