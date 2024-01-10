@@ -17,7 +17,11 @@ import models
 import numpy as np
 from segment_anything import sam_model_registry
 from sklearn.metrics import accuracy_score, roc_auc_score, confusion_matrix
+import os
 
+
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+torch.cuda.empty_cache()
 
 
 max_val = 1000
@@ -37,9 +41,9 @@ def cargar_encoder():
 
     # Load the model
     model = sam_model_registry['vit_b']()
+
     # If CUDA is not available, load the model to the i
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    
+    model.load_state_dict(torch.load(model_path, map_location=device)) 
     return model
 
 # Map function
@@ -72,9 +76,9 @@ def extract_roi(image, mask, margin):
 # Cargar datos function
 def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch_size=32, shuffle_buffer_size=1000, random_seed=None):
     stanford_dataset, stanford_info = tfds.load(f'stanford_dataset/{img_type}', with_info=True,
-                                                 data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
+                                                 data_dir='/data/lung_radiomics/')
     santa_maria_dataset, santa_maria_info = tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True,
-                                                     data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
+                                                     data_dir='/data/lung_radiomics/')
 
     stanford_patients = list(stanford_info.splits.keys())
     santa_maria_patients = list(santa_maria_info.splits.keys())
@@ -121,20 +125,22 @@ class fcModel(nn.Module):
     def __init__(self, encoder_model):
         super(fcModel, self).__init__()
         self.encoder_model = encoder_model
-        self.fc = nn.Linear(128, 1)  # 1 salida parxa clasificación binaria
+        self.fc = nn.Linear(1048576, 1)  # 1 salida parxa clasificación binaria
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # Obtén las características de la red principal
-        features = self.encoder_model(x)
-        print('features shape:', features.shape)
-
+        features = self.encoder_model.image_encoder(x)
+        
         # Aplana las características
         features = features.view(features.size(0), -1)
 
         # Pasa las características a través de la red completamente conectada
         output = self.fc(features)
+        return_output = self.sigmoid(output)
+        print('before after sigmoid: ', output, return_output)
 
-        return output
+        return return_output
 
 def train_one_epoch(model, optimizer, criterion, epoch_index, training_loader):
     running_loss = 0.
@@ -143,31 +149,35 @@ def train_one_epoch(model, optimizer, criterion, epoch_index, training_loader):
     # Here, we use enumerate(training_loader) instead of
     # iter(training_loader) so that we can track the batch
     # index and do some intra-epoch reporting
-    for i, data in enumerate(training_loader):
+    for i, (inputs, labels) in enumerate(training_loader):
         # Every data instance is an input + label pair
-        inputs, labels = data
-        inputs = torch.as_tensor(inputs, device=device)
-        labels = torch.as_tensor(labels, device=device)
 
+        inputs = torch.as_tensor(inputs, device=device)
+        labels = torch.as_tensor(labels, device=device, dtype=torch.float32).view(-1, 1)
+ 
         # Zero your gradients for every batch!
         optimizer.zero_grad()
 
         # Make predictions for this batch
         outputs = model(inputs)
-
+        
         # Compute the loss and its gradients
         loss = criterion(outputs, labels)
         loss.backward()
+
+        print('outputs and true labels:', outputs.item(), labels.item(), loss.item())
+        print()
 
         # Adjust learning weights
         optimizer.step()
 
         # Gather data and report
         running_loss += loss.item()
+
+        del inputs, labels, outputs, loss
         if i % 100 == 99:
             last_loss = running_loss / 100 # loss per batch
             print('  batch {} loss: {}'.format(i + 1, last_loss))
-            tb_x = epoch_index * len(training_loader) + i + 1
             running_loss = 0.
 
     return last_loss
@@ -182,14 +192,13 @@ def construir_modelo(img_size, lr, train_steps):
     # utilizar dimensionalidad de fc_input_size para la dimensionalidad del vector del encoder
 
     # Definir el optimizador
-    parameters = filter(lambda p: p.requires_grad, modelo.parameters())
-    optimizer = optim.Adam(parameters, lr=lr)
+    optimizer = optim.Adam(modelo.parameters(), lr=lr)
 
     # Definir la tasa de aprendizaje
     #cosdecay = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_steps, eta_min=0)
-
+    
     # Definir la función de pérdida
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
 
     # Devolver el modelo, el optimizador y la función de pérdida
     return modelo, optimizer, criterion
@@ -240,35 +249,39 @@ if __name__ == "__main__":
     )
 
     train_steps = args.epochs * (1200 // args.batch)
-
+    
+    torch.cuda.empty_cache()
+    print("llega aca")
     train_ds, test_ds = train_test_dataset
     
     train_ds = tfds.as_numpy(train_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
     test_ds = tfds.as_numpy(test_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
-    
+
     # Construir el modelo
     model, optimizer, criterion = construir_modelo(args.size, 0.001, train_steps)
-    
+    model = model.to(device)
+
     for epoch in range(args.epochs):
         print(f"Epoch {epoch + 1}/{args.epochs}")
 
         model.train(True)
         avg_loss = train_one_epoch(model, optimizer, criterion, epoch, train_ds)
-
+        
+        torch.cuda.empty_cache()
         model.eval()
 
         all_predictions = []
         all_targets = []
 
         with torch.no_grad():
-            for inputs, labels in enumerate(test_ds):
+            for inputs, labels in test_ds:
                 
                 # Every data instance is an input + label pair
-                inputs, labels = data
                 inputs = torch.as_tensor(inputs, device=device)
                 labels = torch.as_tensor(labels, device=device)
 
                 outputs = model(inputs)
+                print('test results:', outputs)
 
                 # Store predictions and targets for later calculation of metrics
                 all_predictions.append(outputs)
