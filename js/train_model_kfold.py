@@ -192,6 +192,19 @@ if __name__ == "__main__":
         # Replace NaN values with 0
         test_accuracy, test_auc, test_precision, test_recall = map(lambda x: 0 if np.isnan(x) else x, 
                                                                [test_accuracy, test_auc, test_precision, test_recall])
+                                                               
+        
+        # Append metrics to arrays
+        all_train_accuracies.append(train_accuracy)
+        all_train_aucs.append(train_auc)
+        all_train_true_positives.append(train_precision)
+        all_train_false_positives.append(train_recall)
+
+        all_test_accuracies.append(test_accuracy)
+        all_test_aucs.append(test_auc)
+        all_test_true_positives.append(test_precision)
+        all_test_false_positives.append(test_recall)
+    
 
         # Print metrics for the current fold
         print(f"Training Metrics: Accuracy: {train_accuracy:.3f}, AUC: {train_auc:.3f}, Precision: {train_precision:.3f}, Recall: {train_recall:.3f}")
