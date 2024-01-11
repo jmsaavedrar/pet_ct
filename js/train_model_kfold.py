@@ -167,50 +167,21 @@ if __name__ == "__main__":
     all_test_true_positives = []
     all_test_false_positives = []
 
+    # Calculate mean for all folds
     for i, (train_ds, test_ds) in enumerate(k_fold_dataset):
-        print(f"Fold: {i}")
-
+        print(f"Fold {i}:")
+        
         train_ds = train_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE)
         test_ds = test_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE)
-
-        # Construir el modelo
+    
+    
+        # Train the model
         modelo = construir_modelo(args.size, train_steps)
-
+        
         # Entrenar el modelo
         early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_auc', patience=5, restore_best_weights=True)
         
         history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds, callbacks=[early_stopping])
-
-        # Save metrics for training dataset
-        train_metrics = modelo.evaluate(train_ds)
-        train_accuracy, train_auc, train_true_positive, train_false_positive = train_metrics[1:5]
-        all_train_accuracies.append(train_accuracy)
-        all_train_aucs.append(train_auc)
-        all_train_true_positives.append(train_true_positive)
-        all_train_false_positives.append(train_false_positive)
-
-        # Save metrics for testing dataset
-        test_metrics = modelo.evaluate(test_ds)
-        test_accuracy, test_auc, test_true_positive, test_false_positive = test_metrics[1:5]
-        
-        # Replace NaN values with 0
-        test_accuracy = 0 if np.isnan(test_accuracy) else test_accuracy
-        test_auc = 0 if np.isnan(test_auc) else test_auc
-        test_true_positive = 0 if np.isnan(test_true_positive) else test_true_positive
-        test_false_positive = 0 if np.isnan(test_false_positive) else test_false_positive
-
-        all_test_accuracies.append(test_accuracy)
-        all_test_aucs.append(test_auc)
-        all_test_true_positives.append(test_true_positive)
-        all_test_false_positives.append(test_false_positive)
-
-    # Calculate mean for all folds
-    for i, (train_ds, test_ds) in enumerate(k_fold_dataset):
-        print(f"Fold {i}:")
-    
-        # Train the model
-        modelo = construir_modelo(args.size, train_steps)
-        history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds)
 
         # Evaluate on training dataset
         train_accuracy, train_auc, train_precision, train_recall = modelo.evaluate(train_ds)[1:5]
