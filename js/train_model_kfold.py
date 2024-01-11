@@ -179,7 +179,7 @@ if __name__ == "__main__":
         modelo = construir_modelo(args.size, train_steps)
         
         # Entrenar el modelo
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_auc', patience=5, restore_best_weights=True)
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_auc', patience=1, restore_best_weights=True)
         
         history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds, callbacks=[early_stopping])
 
