@@ -64,18 +64,18 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
                                               dtype=np.float32, 
                                               encoding='zlib', 
                                               doc='Liver PET Images'),
-             'exam_metadata': tfds.features.FeaturesDict({
-                 'space_directions':  tfds.features.Tensor(shape=(3,), 
+             
+             'space_directions':  tfds.features.Tensor(shape=(3,), 
                                               dtype=np.float64, 
                                               encoding='zlib', 
                                               doc='space directions of exam'),
 
-                 'space_origin': tfds.features.Tensor(shape=(3,), 
+             'space_origin': tfds.features.Tensor(shape=(3,), 
                                               dtype=np.float64, 
                                               encoding='zlib', 
                                               doc='space origin of exam'),
 
-             })
+             )
 
         }),
         supervised_keys=None,  # Set to `None` to disable
@@ -153,6 +153,6 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
                   'mask_exam': mask_exam_i,
                   'label': row['EGFR'],
                   'pet_liver': masked_liver_data,
-                  'exam_metadata': {'space_directions': np.diag(header['space directions']),
-                                    'space_origin': header['space origin']}
+                  'space_directions': np.diag(header['space directions']),
+                  'space_origin': header['space origin']
                 }

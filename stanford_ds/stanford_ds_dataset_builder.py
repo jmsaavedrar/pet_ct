@@ -45,8 +45,12 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                                           dtype=np.int32,
                                           encoding='zlib',
                                           doc = 'Tumor Mask'),
-          'label': tfds.features.ClassLabel(num_classes=2, 
+          'label': tfds.features.ClassLabel(num_classes=3, 
                                             doc='Results on the EGFR Mutation test.'),
+          'kras_label': tfds.features.ClassLabel(num_classes=3, 
+                                            doc='Results on the KRAS Mutation test.'),
+          'alk_label': tfds.features.ClassLabel(num_classes=3, 
+                                            doc='Results on the ALK translocation test.'),                                  
           'pet_liver': tfds.features.Tensor(shape=(None,), 
                                               dtype=np.float32, 
                                               encoding='zlib', 
@@ -110,7 +114,19 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
         patient_id = row['Case ID']
 
         if patient_id == patient_list:
-          label_value  = 1 if row['EGFR mutation status'] == 'Mutant' else 0
+          label_value = 2
+          kras_label = 2
+          alk_label = 2
+          
+          if row['EGFR mutation status'] == 'Mutant': label_value = 1
+          elif row['EGFR mutation status'] == 'Wildtype': label_value = 0
+          
+          if row['KRAS mutation status'] == 'Mutant': kras_label = 1
+          elif row['KRAS mutation status'] == 'Wildtype': kras_label = 0
+          
+          if row['ALK translocation status'] == 'Mutant': alk_label = 1
+          elif row['ALK translocation status'] == 'Wildtype': alk_label = 0
+          
           exam_results = os.path.join(image_folder, patient_id, self.builder_config.img_type) # pytype: disable=attribute-error
           
           if os.path.exists(exam_results):
@@ -169,6 +185,8 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                   'img_exam': data_exam_i,
                   'mask_exam': mask_exam_i,
                   'label': label_value,
+                  'kras_label': kras_label,
+                  'alk_label': alk_label,
                   'pet_liver': masked_liver_data,
                   'exam_metadata': {'space_directions': np.diag(header['space directions']),
                                     'space_origin': header['space origin']}
