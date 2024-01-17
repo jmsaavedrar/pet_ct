@@ -47,39 +47,43 @@ def cargar_encoder():
     return model
 
 # Map function
-
 def map_fun(image, label) :        
     crop_size = 256    
     image = (image - min_val)/ val_range
     image = tf.image.grayscale_to_rgb(image)
-    image = tf.transpose(image, perm=[2,0,1])
     #size = int(crop_size * 1.15)
     #image = tf.image.resize_with_pad(image, size, size)
     #image = tf.image.random_crop(image, (crop_size, crop_size,3))
     #image = tf.image.random_flip_left_right(image)
     return image, label
 
-# Extract ROI function
-def extract_roi(image, mask, margin):
-    mask = tf.cast(mask, dtype=tf.bool)
-    indices = tf.where(mask)
 
+def extract_roi(image, mask, margin):
+    # Convert mask to boolean tensor
+    mask = tf.cast(mask, dtype=tf.bool)
+
+    # Find indices where mask equals 1
+    indices = tf.where(mask)
+    
+    #image = tf.where(mask, image, min_val)
+
+    # Get the minimum and maximum indices along each axis
     min_row = tf.reduce_min(indices[:, 0])
     min_col = tf.reduce_min(indices[:, 1])
     max_row = tf.reduce_max(indices[:, 0])
     max_col = tf.reduce_max(indices[:, 1])
 
-    bounding_box = image[min_row - margin:max_row + 1 + margin, min_col - margin:max_col + 1 + margin]
+    # Extract the bounding box from the image
+    bounding_box = image[min_row-margin:max_row + 1+margin, min_col-margin:max_col + 1+margin]
 
     return bounding_box
 
-# Cargar datos function
 def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch_size=32, shuffle_buffer_size=1000, random_seed=None):
-    stanford_dataset, stanford_info = tfds.load(f'stanford_dataset/{img_type}', with_info=True,
-                                                 data_dir='/data/lung_radiomics/')
-    santa_maria_dataset, santa_maria_info = tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True,
-                                                     data_dir='/data/lung_radiomics/')
+    # Cargar el conjunto de datos desde TensorFlow Datasets
+    stanford_dataset, stanford_info =  tfds.load(f'stanford_dataset/{img_type}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
+    santa_maria_dataset, santa_maria_info =  tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
 
+    # Get the split keys (splits) of the dataset
     stanford_patients = list(stanford_info.splits.keys())
     santa_maria_patients = list(santa_maria_info.splits.keys())
 
@@ -87,50 +91,74 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
         for patient_id in patient_ids:
             patient_data = dataset[patient_id]
             for data in patient_data:
-                mask_exam = data['mask_exam']
-                img_exam = data['img_exam']
+                if data['egfr_label'] < 2:
+                    mask_exam = data['mask_exam']
+                    img_exam = data['img_exam']
+                
+                    # roi value to standarize the image slice
+                    if img_type == 'pet':
+                        liver_roi_val = tf.cast(tf.reduce_mean(data['pet_liver']), dtype=tf.float32)
+                        img_exam  = img_exam / liver_roi_val
+                    
+                    #img_exam = tf.where(img_exam < min_val, min_val, img_exam)
+                    #img_exam = tf.where(img_exam > max_val, max_val, img_exam)
+                    #img_exam = (img_exam - min_val)/ val_range                 
+                    data_roi = extract_roi(img_exam, mask_exam, margin)                           
+                    #print('{} {} {}'.format(np.min(data_roi), np.max(data_roi), data_roi.shape))
+                    data_roi = tf.expand_dims(data_roi, -1)
+                    imm = tf.image.resize(data_roi, (img_size, img_size))
+                    yield imm, data['egfr_label']
 
-                # roi value to standarize the image slice
-                if img_type == 'pet':
-                    liver_roi_val = tf.cast(tf.reduce_mean(data['pet_liver']), dtype=tf.float32)
-                    img_exam  = img_exam / liver_roi_val
+    random.shuffle(stanford_patients)
+    # Calculate the index for the 80/20 split
+    split_index = int(0.8 * len(stanford_patients))
 
-                data_roi = extract_roi(img_exam, mask_exam, margin)
-                data_roi = tf.expand_dims(data_roi, -1)
-                imm = tf.image.resize(data_roi, (img_size, img_size))
+    # Split the list into training and validation sets
+    stanford_train_patients = stanford_patients[:split_index]
+    stanford_val_patients = stanford_patients[split_index:]
 
-                yield imm, data['label']
-
-    stanford_data = tf.data.Dataset.from_generator(
-        lambda: generate_data(stanford_dataset, stanford_patients),
-        output_signature=(
-            tf.TensorSpec(shape=(img_size, img_size, 1), dtype=tf.float32, name="imagen"),
-            tf.TensorSpec(shape=(), dtype=tf.int64, name="label")
-        )
+    stanford_train_data = tf.data.Dataset.from_generator(
+	lambda: generate_data(stanford_dataset, stanford_train_patients),
+	output_signature=(
+	    tf.TensorSpec(shape=(img_size, img_size, 1), dtype=tf.float32, name="imagen"),
+	    tf.TensorSpec(shape=(), dtype=tf.int64, name="label")
+	)
     )
 
+    stanford_val_data = tf.data.Dataset.from_generator(
+	lambda: generate_data(stanford_dataset, stanford_val_patients),
+	output_signature=(
+	    tf.TensorSpec(shape=(img_size, img_size, 1), dtype=tf.float32, name="imagen"),
+	    tf.TensorSpec(shape=(), dtype=tf.int64, name="label")
+	)
+    )
+
+    
     santa_maria_data = tf.data.Dataset.from_generator(
-        lambda: generate_data(santa_maria_dataset, santa_maria_patients),
-        output_signature=(
-            tf.TensorSpec(shape=(img_size, img_size, 1), dtype=tf.float32, name="imagen"),
-            tf.TensorSpec(shape=(), dtype=tf.int64, name="label")
-        )
+	lambda: generate_data(santa_maria_dataset, santa_maria_patients),
+	output_signature=(
+	    tf.TensorSpec(shape=(img_size, img_size, 1), dtype=tf.float32, name="imagen"),
+	    tf.TensorSpec(shape=(), dtype=tf.int64, name="label")
+	)
     )
 
-    return stanford_data, santa_maria_data
+	
 
+    return stanford_train_data, stanford_val_data, santa_maria_data
 
 # Define el modelo completo
 class fcModel(nn.Module):
     def __init__(self, encoder_model):
         super(fcModel, self).__init__()
         self.encoder_model = encoder_model
-        self.fc = nn.Linear(1048576, 1)  # 1 salida parxa clasificación binaria
+        self.fc = nn.Linear(1048576, 1)  # 1 salida para clasificación binaria
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # Obtén las características de la red principal
         features = self.encoder_model.image_encoder(x)
+
+        print(features.shape)
         
         # Aplana las características
         features = features.view(features.size(0), -1)
@@ -195,13 +223,13 @@ def construir_modelo(img_size, lr, train_steps):
     optimizer = optim.Adam(modelo.parameters(), lr=lr)
 
     # Definir la tasa de aprendizaje
-    #cosdecay = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_steps, eta_min=0)
+    cosdecay = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=train_steps, eta_min=0)
     
     # Definir la función de pérdida
     criterion = nn.BCEWithLogitsLoss()
 
     # Devolver el modelo, el optimizador y la función de pérdida
-    return modelo, optimizer, criterion
+    return modelo, optimizer, cosdecay, criterion
 
 
 
@@ -212,13 +240,10 @@ def calculate_metrics(predictions, targets):
     # Calculate metrics
     accuracy = accuracy_score(targets.cpu().numpy(), binary_predictions.cpu().numpy())
     auc = roc_auc_score(targets.cpu().numpy(), torch.sigmoid(predictions).cpu().numpy())
+    precision = precision_score(targets.cpu().numpy(), binary_predictions.cpu().numpy())
+    recall = recall_score(targets.cpu().numpy(), binary_predictions.cpu().numpy())
 
-    # Calculate confusion matrix
-    cm = confusion_matrix(targets.cpu().numpy(), binary_predictions.cpu().numpy())
-    true_positives = cm[1, 1]
-    false_negatives = cm[1, 0]
-
-    return accuracy, auc, true_positives, false_negatives
+    return accuracy, auc, precision, recall
 
 
 
@@ -251,15 +276,20 @@ if __name__ == "__main__":
     train_steps = args.epochs * (1200 // args.batch)
     
     torch.cuda.empty_cache()
-    print("llega aca")
-    train_ds, test_ds = train_test_dataset
+    train_ds, val_ds, test_ds = train_test_dataset
     
     train_ds = tfds.as_numpy(train_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
     test_ds = tfds.as_numpy(test_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
-
+    val_ds = tfds.as_numpy(val_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
+    
     # Construir el modelo
     model, optimizer, criterion = construir_modelo(args.size, 0.001, train_steps)
     model = model.to(device)
+
+    # Initialize early stopping parameters
+    best_val_loss = float('inf')
+    early_stopping_counter = 0
+    early_stopping_patience = 5  # Adjust the patience value as needed
 
     for epoch in range(args.epochs):
         print(f"Epoch {epoch + 1}/{args.epochs}")
@@ -270,34 +300,80 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()
         model.eval()
 
-        all_predictions = []
-        all_targets = []
-
+        # Validation phase
+        val_predictions = []
+        val_targets = []
+    
         with torch.no_grad():
-            for inputs, labels in test_ds:
-                
-                # Every data instance is an input + label pair
+            for inputs, labels in val_ds:
                 inputs = torch.as_tensor(inputs, device=device)
                 labels = torch.as_tensor(labels, device=device)
-
+    
                 outputs = model(inputs)
-                print('test results:', outputs)
+    
+                val_predictions.append(outputs)
+                val_targets.append(labels)
+    
+        val_predictions = torch.cat(val_predictions)
+        val_targets = torch.cat(val_targets)
+    
+        # Calculate validation loss
+        val_loss = criterion(val_predictions, val_targets).item()
 
-                # Store predictions and targets for later calculation of metrics
-                all_predictions.append(outputs)
-                all_targets.append(labels)
+        # Calculate training loss 
+        train_loss = avg_loss.item()
 
-        # Concatenate predictions and targets for the entire dataset
-        all_predictions = torch.cat(all_predictions)
-        all_targets = torch.cat(all_targets)
-
-        # Calculate metrics
-        accuracy, auc, true_positives, false_negatives = calculate_metrics(all_predictions, all_targets)
-        
-        print("Resultados de testeo")
+        print(f'Train Loss - {train_loss:.3f}, Val Loss - {val_loss:.3f}')
+        # Calculate and print metrics for training data
+        train_metrics = calculate_metrics(val_predictions, val_targets)
+        print(f'Validation Metrics - Accuracy: {train_metrics[0]:.3f}, AUC: {train_metrics[1]:.3f}, Precision: {train_metrics[2]:.3f}, Recall: {train_metrics[3]:.3f}')
         print()
+    
+        # Early stopping check
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            early_stopping_counter = 0
+        else:
+            early_stopping_counter += 1
+            if early_stopping_counter >= early_stopping_patience:
+                print(f'Early stopping at epoch {epoch + 1} based on validation loss.')
+                break
 
-        # Print or store the metrics as needed
-        print(f'Accuracy: {accuracy}, AUC: {auc}, True Positives: {true_positives}, False Negatives: {false_negatives}')
-        print()
+        # Learning rate scheduler step
+        cosdecay.step()
+                
+    # Testing phase
+    test_predictions = []
+    test_targets = []
+
+    with torch.no_grad():
+        for test_inputs, test_labels in test_ds:
+            test_inputs = torch.as_tensor(test_inputs, device=device)
+            test_labels = torch.as_tensor(test_labels, device=device)
+
+            test_outputs = model(test_inputs)
+
+            test_predictions.append(test_outputs)
+            test_targets.append(test_labels)
+
+    test_predictions = torch.cat(test_predictions)
+    test_targets = torch.cat(test_targets)
+
+    # Calculate testing loss
+    test_loss = criterion(test_predictions, test_targets).item()
+
+    print()
+    print()
+    # Calculate and print metrics for testing data
+    val_metrics = calculate_metrics(val_predictions, val_targets)
+    print(f'Validation Metrics - Accuracy: {val_metrics[0]:.3f}, AUC: {val_metrics[1]:.3f}, Precision: {val_metrics[2]:.3f}, Recall: {val_metrics[3]:.3f}')
+
+    # Calculate and print metrics for testing data
+    test_metrics = calculate_metrics(test_predictions, test_targets)
+    print(f'Testing Metrics - Accuracy: {test_metrics[0]:.3f}, AUC: {test_metrics[1]:.3f}, Precision: {test_metrics[2]:.3f}, Recall: {test_metrics[3]:.3f}')
+
+    # Print or store the results as needed
+    print(f'Training Loss: {avg_loss:.3f}, Validation Loss: {val_loss:.3f}, Testing Loss: {test_loss:.3f}')
+    print()
+
 

@@ -35,38 +35,37 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     """Returns the dataset metadata."""
     return self.dataset_info_from_configs(
       features=tfds.features.FeaturesDict({
-          # Features of the dataset
-          'patient_id': tfds.features.Text(doc='Id of patients of Stanford'),
-          'img_exam': tfds.features.Tensor(shape=(None, None),
+        # Features of the dataset
+        'patient_id': tfds.features.Text(doc='Id of patients of Stanford'),
+        'img_exam': tfds.features.Tensor(shape=(None, None),
                                           dtype=np.float32,
                                           encoding='zlib',
                                           doc = 'Exam Images'),
-          'mask_exam': tfds.features.Tensor(shape=(None, None),
+        'mask_exam': tfds.features.Tensor(shape=(None, None),
                                           dtype=np.int32,
                                           encoding='zlib',
                                           doc = 'Tumor Mask'),
-          'label': tfds.features.ClassLabel(num_classes=3, 
-                                            doc='Results on the EGFR Mutation test.'),
-          'kras_label': tfds.features.ClassLabel(num_classes=3, 
-                                            doc='Results on the KRAS Mutation test.'),
-          'alk_label': tfds.features.ClassLabel(num_classes=3, 
-                                            doc='Results on the ALK translocation test.'),                                  
-          'pet_liver': tfds.features.Tensor(shape=(None,), 
-                                              dtype=np.float32, 
-                                              encoding='zlib', 
-                                              doc='Liver PET Images'),
-                                              'exam_metadata': tfds.features.FeaturesDict({
+        'egfr_label': tfds.features.ClassLabel(names=['Wildtype', 'Mutant', 'Unknown', 'Not collected'],
+                                          doc='Results on the EGFR Mutation test: 1 is positive and 0 negative'),
+        'kras_label': tfds.features.ClassLabel(names=['Wildtype', 'Mutant', 'Unknown', 'Not collected'],
+                                          doc='Results on the KRAS Mutation test.'),
+        'alk_label': tfds.features.ClassLabel(names=['Wildtype', 'Translocated', 'Unknown', 'Not collected'], 
+                                          doc='Results on the ALK translocation test.'),                                  
+        'pet_liver': tfds.features.Tensor(shape=(None,),
+                                          dtype=np.float32, 
+                                          encoding='zlib', 
+                                          doc='Liver PET Images'),
+        'exam_metadata': tfds.features.FeaturesDict({
           'space_directions':  tfds.features.Tensor(shape=(3,), 
                                               dtype=np.float64, 
                                               encoding='zlib', 
                                               doc='space directions of exam'),
-
           'space_origin': tfds.features.Tensor(shape=(3,), 
                                               dtype=np.float64, 
                                               encoding='zlib', 
                                               doc='space origin of exam'),
 
-          })
+         })
       }),
       supervised_keys=None,  # Set to `None` to disable
       disable_shuffling=False,
@@ -100,7 +99,7 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     # Create dictionaries of patients with their associated data
     return {patient: self._generate_examples(archive_path, patient) for patient in final_patients} 
 
-
+    
   
   def _generate_examples(self, path, patient_list):
 
@@ -109,23 +108,17 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
     image_folder = os.path.join(path, 'data')
     
     dcm_patients = []
+    mutation_status2int = {'Wildtype':0, 'Mutant':1, 'Unknown':2, 'Not collected': 3}
+    translocation_status2int = {'Wildtype':0, 'Translocated':1, 'Unknown':2, 'Not collected': 3}
+    
     with data_file.open() as f:
       for row in csv.DictReader(f):
         patient_id = row['Case ID']
 
         if patient_id == patient_list:
-          label_value = 2
-          kras_label = 2
-          alk_label = 2
-          
-          if row['EGFR mutation status'] == 'Mutant': label_value = 1
-          elif row['EGFR mutation status'] == 'Wildtype': label_value = 0
-          
-          if row['KRAS mutation status'] == 'Mutant': kras_label = 1
-          elif row['KRAS mutation status'] == 'Wildtype': kras_label = 0
-          
-          if row['ALK translocation status'] == 'Mutant': alk_label = 1
-          elif row['ALK translocation status'] == 'Wildtype': alk_label = 0
+          label_value = mutation_status2int[row['EGFR mutation status']] 
+          kras_label = mutation_status2int[row['KRAS mutation status']]
+          alk_label = translocation_status2int[row['ALK translocation status']]
           
           exam_results = os.path.join(image_folder, patient_id, self.builder_config.img_type) # pytype: disable=attribute-error
           
@@ -184,7 +177,7 @@ class StanfordDataset(tfds.core.GeneratorBasedBuilder):
                   'patient_id': patient_id,
                   'img_exam': data_exam_i,
                   'mask_exam': mask_exam_i,
-                  'label': label_value,
+                  'egfr_label': label_value,
                   'kras_label': kras_label,
                   'alk_label': alk_label,
                   'pet_liver': masked_liver_data,

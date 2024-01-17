@@ -58,24 +58,23 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
                                             dtype=np.int32,
                                             encoding='zlib',
                                             doc = 'Tumor Mask'),
-            'label': tfds.features.ClassLabel(num_classes=2, 
-                                              doc='Results on the EGFR Mutation test.'),
+            'egfr_label': tfds.features.ClassLabel(names=['Wildtype', 'Mutant'],
+                                            doc='Results on the EGFR Mutation test: 1 is positive and 0 is negative.'),
             'pet_liver': tfds.features.Tensor(shape=(None,), 
-                                              dtype=np.float32, 
-                                              encoding='zlib', 
-                                              doc='Liver PET Images'),
-             
-             'space_directions':  tfds.features.Tensor(shape=(3,), 
-                                              dtype=np.float64, 
-                                              encoding='zlib', 
-                                              doc='space directions of exam'),
+                                            dtype=np.float32, 
+                                            encoding='zlib', 
+                                            doc='Liver PET Images'),
+            'exam_metadata': tfds.features.FeaturesDict({
+                'space_directions':  tfds.features.Tensor(shape=(3,), 
+                                                dtype=np.float64, 
+                                                encoding='zlib', 
+                                                doc='space directions of exam'),
+                'space_origin': tfds.features.Tensor(shape=(3,), 
+                                                dtype=np.float64, 
+                                                encoding='zlib', 
+                                                doc='space origin of exam'),
 
-             'space_origin': tfds.features.Tensor(shape=(3,), 
-                                              dtype=np.float64, 
-                                              encoding='zlib', 
-                                              doc='space origin of exam'),
-
-             )
+          })
 
         }),
         supervised_keys=None,  # Set to `None` to disable
@@ -151,8 +150,8 @@ class SantaMariaDataset(tfds.core.GeneratorBasedBuilder):
                   'patient_id': patient_id,
                   'img_exam': data_exam_i,
                   'mask_exam': mask_exam_i,
-                  'label': row['EGFR'],
+                  'egfr_label': 'Mutant' if row['EGFR'] == '1' else 'Wildtype',
                   'pet_liver': masked_liver_data,
-                  'space_directions': np.diag(header['space directions']),
-                  'space_origin': header['space origin']
+                  'exam_metadata': {'space_directions': np.diag(header['space directions']),
+                                    'space_origin': header['space origin']}
                 }

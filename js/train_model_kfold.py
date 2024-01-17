@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import numpy as np
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from tensorflow.keras.metrics import AUC, Precision, Recall
 import argparse
 import metrics
@@ -63,7 +63,7 @@ def cargar_datos(dataset, img_type, n_splits=5, img_size=32, margin=5, batch_siz
         for patient_id in patient_ids:
             patient_data = dataset[patient_id]
             for data in patient_data:
-                if data['label'] != 2:
+                if data['egfr_label'] < 2:
                     mask_exam = data['mask_exam']
                     img_exam = data['img_exam']
                 
@@ -78,7 +78,7 @@ def cargar_datos(dataset, img_type, n_splits=5, img_size=32, margin=5, batch_siz
                     #print('{} {} {}'.format(np.min(data_roi), np.max(data_roi), data_roi.shape))
                     data_roi = tf.expand_dims(data_roi, -1)
                     imm = tf.image.resize(data_roi, (img_size, img_size))
-                    yield imm, data['label']
+                    yield imm, data['egfr_label']
 
     for i, (train_indices, test_indices) in enumerate(skf.split(patients)):
         training_patients = [patients[i] for i in train_indices]
@@ -105,16 +105,17 @@ def cargar_datos(dataset, img_type, n_splits=5, img_size=32, margin=5, batch_siz
     return fold_datasets
 
 def construir_modelo(img_size, train_steps):
-    modelo = models.simple_model_simplest((img_size, img_size, 3))
+    modelo = models.simple_model_v3((img_size, img_size, 3))
     cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, decay_steps  = train_steps, alpha = alpha)
     optimizer=tf.keras.optimizers.Adam(learning_rate = cosdecay)
 
     modelo.compile(
         optimizer=optimizer,
-        loss=tf.keras.losses.BinaryFocalCrossentropy(), 
+        loss=tf.keras.losses.BinaryFocalCrossentropy(gamma=6),
         metrics=['accuracy', AUC(name='auc', curve='PR'), metrics.precision, metrics.recall]
     )
     return modelo
+
 
 
 if __name__ == "__main__":
@@ -179,8 +180,8 @@ if __name__ == "__main__":
         modelo = construir_modelo(args.size, train_steps)
         
         # Entrenar el modelo
-        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_auc', patience=1, restore_best_weights=True)
-        
+        early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+
         history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds, callbacks=[early_stopping])
 
         # Evaluate on training dataset
@@ -190,7 +191,7 @@ if __name__ == "__main__":
         test_accuracy, test_auc, test_precision, test_recall = modelo.evaluate(test_ds)[1:5]
 
         # Replace NaN values with 0
-        test_accuracy, test_auc, test_precision, test_recall = map(lambda x: 0 if np.isnan(x) else x, 
+        test_accuracy, test_auc, test_precision, test_recall = map(lambda x: 0 if np.isnan(x) else x,
                                                                [test_accuracy, test_auc, test_precision, test_recall])
                                                                
         

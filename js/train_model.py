@@ -62,7 +62,7 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
         for patient_id in patient_ids:
             patient_data = dataset[patient_id]
             for data in patient_data:
-                if data['label'] != 2:
+                if data['egfr_label'] < 2:
                     mask_exam = data['mask_exam']
                     img_exam = data['img_exam']
                 
@@ -78,7 +78,7 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
                     #print('{} {} {}'.format(np.min(data_roi), np.max(data_roi), data_roi.shape))
                     data_roi = tf.expand_dims(data_roi, -1)
                     imm = tf.image.resize(data_roi, (img_size, img_size))
-                    yield imm, data['label']
+                    yield imm, data['egfr_label']
 
     random.shuffle(stanford_patients)
     # Calculate the index for the 80/20 split
@@ -118,16 +118,17 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
     return stanford_train_data, stanford_val_data, santa_maria_data
 
 def construir_modelo(img_size, train_steps):
-    modelo = models.simple_model_simplest((img_size, img_size, 3))
+    modelo = models.simple_model_v3((img_size, img_size, 3))
     cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, decay_steps  = train_steps, alpha = alpha)
     optimizer=tf.keras.optimizers.Adam(learning_rate = cosdecay)
 
     modelo.compile(
         optimizer=optimizer,
-        loss=tf.keras.losses.BinaryFocalCrossentropy(), 
+        loss=tf.keras.losses.BinaryFocalCrossentropy(gamma=6),
         metrics=['accuracy', AUC(name='auc', curve='PR'), metrics.precision, metrics.recall]
     )
     return modelo
+
 
 
 if __name__ == "__main__":
@@ -163,11 +164,11 @@ if __name__ == "__main__":
     val_ds = val_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE)
     test_ds = test_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE)
     
-    # Construir el modelo
+    ## Construir el modelo
     modelo = construir_modelo(args.size, train_steps)
 
     # Entrenar el modelo
-    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_accuracy', patience=1, restore_best_weights=True)
+    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
     history = modelo.fit(train_ds, epochs=args.epochs, validation_data=test_ds, callbacks=[early_stopping])
 
     # Evaluate on training dataset
@@ -180,18 +181,18 @@ if __name__ == "__main__":
     test_accuracy, test_auc, test_precision, test_recall = modelo.evaluate(test_ds)[1:5]
 
     # Replace NaN values with 0
-    test_accuracy, test_auc, test_precision, test_recall = map(lambda x: 0 if np.isnan(x) else x, 
+    test_accuracy, test_auc, test_precision, test_recall = map(lambda x: 0 if np.isnan(x) else x,
                                                            [test_accuracy, test_auc, test_precision, test_recall])
 
     # Print metrics
     print("Training Metrics:")
-    print(f"Accuracy: {train_accuracy}, AUC: {train_auc}, Precision: {train_precision}, Recall: {train_recall}")
+    print(f"Accuracy: {train_accuracy:.3f}, AUC: {train_auc:.3f}, Precision: {train_precision:.3f}, Recall: {train_recall:.3f}")
     print("-------------------------------------------")
 
     print("Validation Metrics:")
-    print(f"Accuracy: {val_accuracy}, AUC: {val_auc}, Precision: {val_precision}, Recall: {val_recall}")
+    print(f"Accuracy: {val_accuracy:.3f}, AUC: {val_auc:.3f}, Precision: {val_precision:.3f}, Recall: {val_recall:.3f}")
     print("-------------------------------------------")
 
     print("Testing Metrics:")
-    print(f"Accuracy: {test_accuracy}, AUC: {test_auc}, Precision: {test_precision}, Recall: {test_recall}")
+    print(f"Accuracy: {test_accuracy:.3f}, AUC: {test_auc:.3f}, Precision: {test_precision:.3f}, Recall: {test_recall:.3f}")
 
