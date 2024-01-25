@@ -8,8 +8,8 @@ import metrics
 import models
 
 
-max_val = 1000
-min_val = -1000
+max_val = 440
+min_val = -360
 val_range = max_val - min_val
 margin = 3
 initial_learning_rate = 0.001
@@ -44,6 +44,8 @@ def extract_roi(image, mask, margin):
 
     # Extract the bounding box from the image
     bounding_box = image[min_row-margin:max_row + 1+margin, min_col-margin:max_col + 1+margin]
+    
+    bounding_box = tf.clip_by_value(bounding_box, min_val, max_val)
 
     return bounding_box
     
