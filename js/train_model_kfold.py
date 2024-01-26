@@ -53,6 +53,7 @@ def extract_roi(image, mask, margin):
 
 def cargar_datos(dataset, img_type, n_splits=5, img_size=32, margin=5, batch_size=32, shuffle_buffer_size=1000, random_seed=None):
     # Cargar el conjunto de datos desde TensorFlow Datasets
+
     dataset, info =  tfds.load(f'{dataset}/{img_type}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
 
     # Get the split keys (splits) of the dataset

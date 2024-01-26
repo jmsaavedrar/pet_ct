@@ -4,7 +4,7 @@ import torch.optim as optim
 import torch.utils.data as data
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-
+import random
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import numpy as np
@@ -51,6 +51,7 @@ def map_fun(image, label) :
     crop_size = 256    
     image = (image - min_val)/ val_range
     image = tf.image.grayscale_to_rgb(image)
+    image = tf.transpose(image, perm=[2, 0, 1])
     #size = int(crop_size * 1.15)
     #image = tf.image.resize_with_pad(image, size, size)
     #image = tf.image.random_crop(image, (crop_size, crop_size,3))
@@ -157,8 +158,6 @@ class fcModel(nn.Module):
     def forward(self, x):
         # Obtén las características de la red principal
         features = self.encoder_model.image_encoder(x)
-
-        print(features.shape)
         
         # Aplana las características
         features = features.view(features.size(0), -1)
@@ -166,7 +165,6 @@ class fcModel(nn.Module):
         # Pasa las características a través de la red completamente conectada
         output = self.fc(features)
         return_output = self.sigmoid(output)
-        print('before after sigmoid: ', output, return_output)
 
         return return_output
 
@@ -192,9 +190,6 @@ def train_one_epoch(model, optimizer, criterion, epoch_index, training_loader):
         # Compute the loss and its gradients
         loss = criterion(outputs, labels)
         loss.backward()
-
-        print('outputs and true labels:', outputs.item(), labels.item(), loss.item())
-        print()
 
         # Adjust learning weights
         optimizer.step()
@@ -283,7 +278,7 @@ if __name__ == "__main__":
     val_ds = tfds.as_numpy(val_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
     
     # Construir el modelo
-    model, optimizer, criterion = construir_modelo(args.size, 0.001, train_steps)
+    model, optimizer, cosdecay, criterion = construir_modelo(args.size, 0.001, train_steps)
     model = model.to(device)
 
     # Initialize early stopping parameters
