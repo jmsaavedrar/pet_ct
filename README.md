@@ -100,6 +100,9 @@ En caso de que los argumentos no cumplan con estas validaciones, se lanzan excep
 export TF_CPP_MIN_LOG_LEVEL=2
 ```
 
+## Análisis de características radiométricas
+Se realiza un análisis de las características radiométricas de los exámenes en los archivos *radiometrics_sm_analysis.ipynb* y *radiometrics_stanford_analysis.ipynb* para los conjuntos de Santa María y Stanford respectivamente. Para ejecutar estos archivos, es necesario poseer en la carpeta los datos *santamaria_data_all__binwidth_5_sigma_[1,2,3]_imtype_{imageTypes}_normalize_{normalize}.csv* y *stanford_data_all__binwidth_5_sigma_[1,2,3]_imtype_{imageTypes}_normalize_{normalize}.csv*. 
+
 
 ## Modificación de los datos
 Para modificar el conjunto de datos de *tensorflow_datasets*, en primer lugar es necesario pedir el acceso a los datos *'Data Clinica Santa Maria'* y *'Data NSCLC Radiogenomics'* a Hector Henriquez. 
