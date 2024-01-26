@@ -5,19 +5,11 @@ Repositorio del estudio de detección de tumores en pacientes. Se implementan mo
 2. Fuente de datos pública de pacientes con cáncer de pulmón de tipo células no pequeñas correspondiente al Dataset NSCLC Radiogenomics. Este set de datos corresponde a 211 pacientes adultos con cáncer de pulmón, imágenes PET-CT, entre otros.
 
 ## Instalacion de Python y dependencias
-Para manejar las dependencias necesarias para correr los códigos, en primer lugar es necesario instalar anaconda (o miniconda) e inicializar un nuevo ambiente virtual con **Python 3.8**:
-
-```
-conda create -n "myenv" python=3.8.12
-```
-
-A continuacion crear ambiente virtual con el archivo de *environment.yml*.
+Para manejar las dependencias necesarias para correr los códigos, en primer lugar es necesario instalar anaconda (o miniconda) y crear un nuevo ambiente virtual con el archivo *environment.yml*:
 
 ```
 conda env create -f environment.yml
 ```
-
-
 
 Los ambientes de conda se activan y desactivan, respectivamente, de la siguiente forma:
 
@@ -35,11 +27,11 @@ tensorflow_datasets==4.9.2
 **IMPORTANTE**: Puede que no funcione el sistema con otra versión de las librerías anteriores.
 
 ## Uso de datos
-Para usar el conjunto de datos PET, CT y TORAX, pedir los conjuntos de datos de *tensorflow* a Prof. José Saavedra y descomprimir sus contenidos en el directorio en 'home/tensorflow_datasets/'. Los conjuntos de datos son ser:
+Para usar el conjunto de datos PET, CT y TORAX, pedir los conjuntos de datos implementados en *tensorflow datasets* a José Saavedra y descomprimir sus contenidos en el directorio en 'home/tensorflow_datasets/'. Estos corresponden a:
 - santa_maria_dataset
 - stanford_dataset
 
-Habiendo configurados los datos, se pueden utilizar. Para aprender mas de *tensorflow_datasets* se puede revisar el siguiente [link](https://www.tensorflow.org/datasets/add_dataset?hl=es).
+Habiendo configurados los datos, se pueden utilizar para su análisis y entrenamiento de modelos. Para aprender mas de *tensorflow datasets* se puede revisar la [documentación](https://www.tensorflow.org/datasets/add_dataset?hl=es).
 
 ### Utilizar los datos de la Clínica Santa María
 
@@ -66,8 +58,7 @@ ds = tfds.load('stanford_dataset/<tipo_examen>') # donde <tipo_examen> puede ser
 dataset = ds['R01-001']                            # obtiene todos los datos del paciente 'R01-001'. Esto se puede hacer para todos los pacientes del conjunto de datos.
 ```
 
-El archivo *load_datasets_example.ipynb* realiza un ejemplo de como construir *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje. Se puede también especificar la ubicación de los conjuntos de datos con el argumento *data_dir* en la función *tfds.load*.
-
+**Importante**: El archivo *load_datasets_example.ipynb* muestra las características de los conjuntos de datos , realiza un ejemplo de *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje. Se puede también especificar la ubicación de los conjuntos de datos con el argumento *data_dir* en la función *tfds.load*.
 
 
 ## Entrenar modelos base
@@ -80,7 +71,7 @@ Se ofrecen dos *pipelines* de entrenamiento, validación y testeo para los conju
 
 Reciben los siguientes argumentos:
 
-- **-d, --dataset**: Especifica el conjunto de datos a utilizar, que puede ser "santa_maria_dataset" o "stanford_dataset". Este parámetro determina la fuente de datos para el entrenamiento del modelo. Solo para *train_model_kfold*.
+- **-d, --dataset**: Especifica el conjunto de datos a utilizar, que puede ser "santa_maria_dataset" o "stanford_dataset". Este parámetro determina la fuente de datos para el entrenamiento del modelo. **Solo para *train_model_kfold***.
 
 - **-p, --particion**: Define el tipo de partición en el conjunto de datos, siendo opciones válidas "torax3d", "body", "pet" para "santa_maria_dataset" y "pet", "ct", "chest_ct" para "stanford_dataset".
 
@@ -103,7 +94,7 @@ El script incluye validaciones para garantizar que los argumentos proporcionados
 
 En caso de que los argumentos no cumplan con estas validaciones, se lanzan excepciones con mensajes descriptivos indicando el problema. Este enfoque garantiza que el usuario proporcione configuraciones coherentes y adecuadas para el proceso de entrenamiento del modelo.
 
-**Importante**: Para la ejecución de los scripts, ejecutar el siguiente comando:
+**Importante**: Para la ejecución de los scripts y evitar la aparición de mensajes de advertencia, ejecutar el siguiente comando:
 
 ```
 export TF_CPP_MIN_LOG_LEVEL=2
