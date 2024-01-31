@@ -19,7 +19,7 @@ alpha = 0.00001
 def map_fun(image, label) :        
     crop_size = 256    
     image = (image - min_val)/ val_range
-    image = tf.image.grayscale_to_rgb(image)
+    #image = tf.image.grayscale_to_rgb(image)
     #size = int(crop_size * 1.15)
     #image = tf.image.resize_with_pad(image, size, size)
     #image = tf.image.random_crop(image, (crop_size, crop_size,3))
@@ -44,8 +44,6 @@ def extract_roi(image, mask, margin):
 
     # Extract the bounding box from the image
     bounding_box = image[min_row-margin:max_row + 1+margin, min_col-margin:max_col + 1+margin]
-    
-    bounding_box = tf.clip_by_value(bounding_box, min_val, max_val)
 
     return bounding_box
     
@@ -108,7 +106,7 @@ def cargar_datos(dataset, img_type, n_splits=5, img_size=32, margin=5, batch_siz
     return fold_datasets
 
 def construir_modelo(img_size, train_steps):
-    modelo = models.simple_model_v3((img_size, img_size, 3))
+    modelo = models.simple_model_v3_grayscale((img_size, img_size, 1))
     cosdecay = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate, decay_steps  = train_steps, alpha = alpha)
     optimizer=tf.keras.optimizers.Adam(learning_rate = cosdecay)
 

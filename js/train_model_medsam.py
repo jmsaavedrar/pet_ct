@@ -309,16 +309,13 @@ if __name__ == "__main__":
                 val_predictions.append(outputs)
                 val_targets.append(labels)
     
-        val_predictions = torch.cat(val_predictions)
-        val_targets = torch.cat(val_targets)
+        val_predictions = torch.cat(val_predictions).view(-1, 1)
+        val_targets = torch.cat(val_targets).view(-1,1).long() 
     
         # Calculate validation loss
         val_loss = criterion(val_predictions, val_targets).item()
 
-        # Calculate training loss 
-        train_loss = avg_loss.item()
-
-        print(f'Train Loss - {train_loss:.3f}, Val Loss - {val_loss:.3f}')
+        print(f'Train Loss - {avg_loss:.3f}, Val Loss - {val_loss:.3f}')
         # Calculate and print metrics for training data
         train_metrics = calculate_metrics(val_predictions, val_targets)
         print(f'Validation Metrics - Accuracy: {train_metrics[0]:.3f}, AUC: {train_metrics[1]:.3f}, Precision: {train_metrics[2]:.3f}, Recall: {train_metrics[3]:.3f}')

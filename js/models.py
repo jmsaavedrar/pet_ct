@@ -76,3 +76,20 @@ def simple_model_v3(shape) :
     #x = tf.keras.layers.Dense(2, activation = 'softmax')(x)
     model = tf.keras.models.Model(inputs = x_input, outputs = x)
     return model
+    
+    
+    
+def simple_model_v3_grayscale(shape):
+    x_input = tf.keras.layers.Input(shape)
+    
+    x = tf.keras.layers.Conv2D(32, kernel_size=3, strides=2, padding='same', activation='relu')(x_input)
+    x = tf.keras.layers.MaxPooling2D()(x)
+    
+    x = tf.keras.layers.Conv2D(64, kernel_size=3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    
+    x = tf.keras.layers.Dense(64, activation='relu', kernel_regularizer=tf.keras.regularizers.L2())(x)
+    x = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+    
+    model = tf.keras.models.Model(inputs=x_input, outputs=x)
+    return model

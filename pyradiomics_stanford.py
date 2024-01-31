@@ -6,7 +6,7 @@ import SimpleITK as sitk
 
 # Parameters
 archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/stanford_data/'
-binwidth = 20
+binwidth = 15
 sigma = [1, 2, 3]
 exam_types = ['body', 'pet', 'torax3d']
 exam_types_stanford = ['ct', 'pet', 'torax3d']
