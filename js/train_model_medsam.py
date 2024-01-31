@@ -4,7 +4,7 @@ import torch.optim as optim
 import torch.utils.data as data
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-
+import random
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import numpy as np
@@ -16,7 +16,7 @@ import metrics
 import models
 import numpy as np
 from segment_anything import sam_model_registry
-from sklearn.metrics import accuracy_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import accuracy_score, roc_auc_score, confusion_matrix, precision_score, recall_score
 import os
 
 
@@ -50,8 +50,8 @@ def cargar_encoder():
 def map_fun(image, label) :        
     crop_size = 256    
     image = (image - min_val)/ val_range
-    image = tf.image.grayscale_to_rgb(image)
-    #size = int(crop_size * 1.15)
+    image = tf.transpose(tf.image.grayscale_to_rgb(image), perm=[2,0,1])
+    #size = int(crop_size * 1.15) 
     #image = tf.image.resize_with_pad(image, size, size)
     #image = tf.image.random_crop(image, (crop_size, crop_size,3))
     #image = tf.image.random_flip_left_right(image)
@@ -80,8 +80,8 @@ def extract_roi(image, mask, margin):
 
 def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch_size=32, shuffle_buffer_size=1000, random_seed=None):
     # Cargar el conjunto de datos desde TensorFlow Datasets
-    stanford_dataset, stanford_info =  tfds.load(f'stanford_dataset/{img_type}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
-    santa_maria_dataset, santa_maria_info =  tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
+    stanford_dataset, stanford_info =  tfds.load(f'stanford_dataset/{img_type}', with_info=True, data_dir='/home/data/lung_radiomics/')
+    santa_maria_dataset, santa_maria_info =  tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True, data_dir='/home/data/lung_radiomics/')
 
     # Get the split keys (splits) of the dataset
     stanford_patients = list(stanford_info.splits.keys())
@@ -150,25 +150,33 @@ def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch
 class fcModel(nn.Module):
     def __init__(self, encoder_model):
         super(fcModel, self).__init__()
+        
+        # Assuming the input feature size is (batch_size, 256, 64, 64)
         self.encoder_model = encoder_model
-        self.fc = nn.Linear(1048576, 1)  # 1 salida para clasificación binaria
+        
+        # Fully connected layers
+        self.fc1 = nn.Linear(1048576, 512)
+        self.fc2 = nn.Linear(512, 128)
+        self.fc3 = nn.Linear(128, 1)
+        
+        # Sigmoid activation for binary classification
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        # Obtén las características de la red principal
+        # Reshape the input feature vector
         features = self.encoder_model.image_encoder(x)
-
-        print(features.shape)
-        
-        # Aplana las características
         features = features.view(features.size(0), -1)
 
-        # Pasa las características a través de la red completamente conectada
-        output = self.fc(features)
-        return_output = self.sigmoid(output)
-        print('before after sigmoid: ', output, return_output)
+        # Fully connected layers
+        x = self.fc1(features)
+        x = self.fc2(x)
+        x = self.fc3(x)
+        
+        # Apply sigmoid activation
+        output = self.sigmoid(x)
 
-        return return_output
+        return output
+
 
 def train_one_epoch(model, optimizer, criterion, epoch_index, training_loader):
     running_loss = 0.
@@ -192,9 +200,6 @@ def train_one_epoch(model, optimizer, criterion, epoch_index, training_loader):
         # Compute the loss and its gradients
         loss = criterion(outputs, labels)
         loss.backward()
-
-        print('outputs and true labels:', outputs.item(), labels.item(), loss.item())
-        print()
 
         # Adjust learning weights
         optimizer.step()
@@ -240,8 +245,8 @@ def calculate_metrics(predictions, targets):
     # Calculate metrics
     accuracy = accuracy_score(targets.cpu().numpy(), binary_predictions.cpu().numpy())
     auc = roc_auc_score(targets.cpu().numpy(), torch.sigmoid(predictions).cpu().numpy())
-    precision = precision_score(targets.cpu().numpy(), binary_predictions.cpu().numpy())
-    recall = recall_score(targets.cpu().numpy(), binary_predictions.cpu().numpy())
+    precision = precision_score(targets.cpu().numpy(), binary_predictions.cpu().numpy(), zero_division=np.nan)
+    recall = recall_score(targets.cpu().numpy(), binary_predictions.cpu().numpy(), zero_division=np.nan)
 
     return accuracy, auc, precision, recall
 
@@ -283,7 +288,7 @@ if __name__ == "__main__":
     val_ds = tfds.as_numpy(val_ds.shuffle(1024).map(map_fun).batch(args.batch).prefetch(tf.data.experimental.AUTOTUNE))
     
     # Construir el modelo
-    model, optimizer, criterion = construir_modelo(args.size, 0.001, train_steps)
+    model, optimizer, cosdecay, criterion = construir_modelo(args.size, 0.001, train_steps)
     model = model.to(device)
 
     # Initialize early stopping parameters
@@ -313,15 +318,15 @@ if __name__ == "__main__":
     
                 val_predictions.append(outputs)
                 val_targets.append(labels)
-    
-        val_predictions = torch.cat(val_predictions)
-        val_targets = torch.cat(val_targets)
-    
+        val_predictions = torch.cat(val_predictions).view(-1,1).float()
+        val_targets = torch.cat(val_targets).view(-1,1).float()
+        
+        print(val_predictions.shape, val_targets.shape)
         # Calculate validation loss
         val_loss = criterion(val_predictions, val_targets).item()
 
         # Calculate training loss 
-        train_loss = avg_loss.item()
+        train_loss = avg_loss
 
         print(f'Train Loss - {train_loss:.3f}, Val Loss - {val_loss:.3f}')
         # Calculate and print metrics for training data
@@ -356,8 +361,8 @@ if __name__ == "__main__":
             test_predictions.append(test_outputs)
             test_targets.append(test_labels)
 
-    test_predictions = torch.cat(test_predictions)
-    test_targets = torch.cat(test_targets)
+    test_predictions = torch.cat(test_predictions).view(-1,1).float()
+    test_targets = torch.cat(test_targets).view(-1,1).float()
 
     # Calculate testing loss
     test_loss = criterion(test_predictions, test_targets).item()
