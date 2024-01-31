@@ -5,28 +5,20 @@ Repositorio del estudio de detección de tumores en pacientes. Se implementan mo
 2. Fuente de datos pública de pacientes con cáncer de pulmón de tipo células no pequeñas correspondiente al Dataset NSCLC Radiogenomics. Este set de datos corresponde a 211 pacientes adultos con cáncer de pulmón, imágenes PET-CT, entre otros.
 
 ## Instalacion de Python y dependencias
-Para manejar las dependencias necesarias para correr los códigos, en primer lugar es necesario instalar anaconda (o miniconda) e inicializar un nuevo ambiente virtual con **Python 3.8**:
+Para manejar las dependencias necesarias para correr los códigos, en primer lugar es necesario instalar anaconda (o miniconda) y crear un nuevo ambiente virtual con el archivo *environment.yml*:
 
 ```
-conda create -n "myenv" python=3.8.12
+conda env create -f environment.yml
 ```
-
-A continuacion crear ambiente virtual con el archivo de *environment.yml*.
-
-```
-conda create --name myenv --file environment.yml
-```
-
-
 
 Los ambientes de conda se activan y desactivan, respectivamente, de la siguiente forma:
 
 ```
-conda activate myenv
+conda activate lung_radiomics
 conda deactivate
 ```
 
-Verificar que este instalada las siguientes versiones de las libreras:
+Verificar que estén instaladas las siguientes versiones de las libreras:
 
 ```
 tensorflow==2.12.0
@@ -35,11 +27,11 @@ tensorflow_datasets==4.9.2
 **IMPORTANTE**: Puede que no funcione el sistema con otra versión de las librerías anteriores.
 
 ## Uso de datos
-Para usar el conjunto de datos PET, CT y TORAX, pedir los conjuntos de datos de *tensorflow* a Prof. José Saavedra y descomprimir sus contenidos en el directorio en 'home/tensorflow_datasets/'. Los conjuntos de datos deberían ser:
+Para usar el conjunto de datos PET, CT y TORAX, pedir los conjuntos de datos implementados en *tensorflow datasets* a José Saavedra y descomprimir sus contenidos en el directorio en 'home/tensorflow_datasets/'. Estos corresponden a:
 - santa_maria_dataset
 - stanford_dataset
 
-Habiendo configurados los datos, se pueden utilizar.
+Habiendo configurados los datos, se pueden utilizar para su análisis y entrenamiento de modelos. Para aprender mas de *tensorflow datasets* se puede revisar la [documentación](https://www.tensorflow.org/datasets/add_dataset?hl=es).
 
 ### Utilizar los datos de la Clínica Santa María
 
@@ -66,14 +58,51 @@ ds = tfds.load('stanford_dataset/<tipo_examen>') # donde <tipo_examen> puede ser
 dataset = ds['R01-001']                            # obtiene todos los datos del paciente 'R01-001'. Esto se puede hacer para todos los pacientes del conjunto de datos.
 ```
 
-El archivo *load_datasets_example.ipynb* realiza un ejemplo de como construir *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje.
+**Importante**: El archivo *load_datasets_example.ipynb* muestra las características de los conjuntos de datos , realiza un ejemplo de *k-fold* y divisiones de conjuntos de datos en *train* y *test* para entrenar modelos de aprendizaje. Se puede también especificar la ubicación de los conjuntos de datos con el argumento *data_dir* en la función *tfds.load*.
 
----
+
 ## Entrenar modelos base
 
-Los modelos base 
+Se ofrecen dos *pipelines* de entrenamiento, validación y testeo para los conjuntos de datos de Santa María y de Stanford. Estos corresponden a los scripts */js/train_model.py* y */js/train_model_kfold.py*.
 
----
+*train_model_kfold.py* evalúa modelos visuales con KFold para los conjuntos de Stanford y Santa Maria.
+
+*train_model.py* evalúa modelos visuales de forma que son entrenados en el conjunto de Stanford y evaluados en el conjunto de Santa María.
+
+Reciben los siguientes argumentos:
+
+- **-d, --dataset**: Especifica el conjunto de datos a utilizar, que puede ser "santa_maria_dataset" o "stanford_dataset". Este parámetro determina la fuente de datos para el entrenamiento del modelo. **Solo para *train_model_kfold***.
+
+- **-p, --particion**: Define el tipo de partición en el conjunto de datos, siendo opciones válidas "torax3d", "body", "pet" para "santa_maria_dataset" y "pet", "ct", "chest_ct" para "stanford_dataset".
+
+- **-b, --batch**: Controla el tamaño del lote utilizado durante el entrenamiento. Este parámetro influye en la cantidad de muestras que se utilizan en cada iteración de entrenamiento.
+
+- **-s, --size**: Especifica el tamaño de la imagen para la extracción de la Región de Interés (ROI). Este parámetro determina las dimensiones de las imágenes que serán utilizadas en el modelo.
+
+- **-e, --epochs**: Indica el número de épocas de entrenamiento que el modelo realizará. Una época corresponde a una iteración completa a través de todo el conjunto de datos de entrenamiento.
+
+- **-n, --splits**: Define el número de divisiones para el método de validación cruzada KFold. Este parámetro es relevante para evaluar el rendimiento del modelo.
+
+- **--seed**: Permite establecer una semilla aleatoria para asegurar la reproducibilidad de los experimentos.
+
+### Validación de argumentos
+El script incluye validaciones para garantizar que los argumentos proporcionados sean coherentes y válidos:
+
+- Se verifica que el conjunto de datos especificado sea válido, limitándolo a "santa_maria_dataset" o "stanford_dataset".
+
+- Dependiendo del conjunto de datos, se asegura que el tipo de partición sea apropiado, siendo "body", "pet", "torax3d" para "santa_maria_dataset", y "pet", "ct", "chest_ct" para "stanford_dataset".
+
+En caso de que los argumentos no cumplan con estas validaciones, se lanzan excepciones con mensajes descriptivos indicando el problema. Este enfoque garantiza que el usuario proporcione configuraciones coherentes y adecuadas para el proceso de entrenamiento del modelo.
+
+**Importante**: Para la ejecución de los scripts y evitar la aparición de mensajes de advertencia, ejecutar el siguiente comando:
+
+```
+export TF_CPP_MIN_LOG_LEVEL=2
+```
+
+## Análisis de características radiométricas
+Se realiza un análisis de las características radiométricas de los exámenes en los archivos *radiometrics_sm_analysis.ipynb* y *radiometrics_stanford_analysis.ipynb* para los conjuntos de Santa María y Stanford respectivamente. Para ejecutar estos archivos, es necesario poseer en la carpeta los datos *santamaria_data_all__binwidth_5_sigma_[1,2,3]_imtype_{imageTypes}_normalize_{normalize}.csv* y *stanford_data_all__binwidth_5_sigma_[1,2,3]_imtype_{imageTypes}_normalize_{normalize}.csv*. 
+
 
 ## Modificación de los datos
 Para modificar el conjunto de datos de *tensorflow_datasets*, en primer lugar es necesario pedir el acceso a los datos *'Data Clinica Santa Maria'* y *'Data NSCLC Radiogenomics'* a Hector Henriquez. 

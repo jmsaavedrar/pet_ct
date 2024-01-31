@@ -6,7 +6,7 @@ import SimpleITK as sitk
 
 # Parameters
 archive_path = '/media/roberto/TOSHIBA EXT/pet_ct/santa_maria_data'
-binwidth = 5
+binwidth = 20
 sigma = [1, 2, 3]
 exam_types = ['body', 'pet', 'torax3d']
 normalize = True

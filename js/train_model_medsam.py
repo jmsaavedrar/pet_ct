@@ -50,8 +50,9 @@ def cargar_encoder():
 def map_fun(image, label) :        
     crop_size = 256    
     image = (image - min_val)/ val_range
-    image = tf.transpose(tf.image.grayscale_to_rgb(image), perm=[2,0,1])
-    #size = int(crop_size * 1.15) 
+    image = tf.image.grayscale_to_rgb(image)
+    image = tf.transpose(image, perm=[2, 0, 1])
+    #size = int(crop_size * 1.15)
     #image = tf.image.resize_with_pad(image, size, size)
     #image = tf.image.random_crop(image, (crop_size, crop_size,3))
     #image = tf.image.random_flip_left_right(image)
@@ -318,6 +319,7 @@ if __name__ == "__main__":
     
                 val_predictions.append(outputs)
                 val_targets.append(labels)
+
         val_predictions = torch.cat(val_predictions).view(-1,1).float()
         val_targets = torch.cat(val_targets).view(-1,1).float()
         
