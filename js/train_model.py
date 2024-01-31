@@ -51,8 +51,8 @@ def extract_roi(image, mask, margin):
 
 def cargar_datos(img_type, img_type_sm, n_splits=5, img_size=32, margin=5, batch_size=32, shuffle_buffer_size=1000, random_seed=None):
     # Cargar el conjunto de datos desde TensorFlow Datasets
-    stanford_dataset, stanford_info =  tfds.load(f'stanford_dataset/{img_type}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
-    santa_maria_dataset, santa_maria_info =  tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True, data_dir='/media/roberto/TOSHIBA EXT/tensorflow_ds/')
+    stanford_dataset, stanford_info =  tfds.load(f'stanford_dataset/{img_type}', with_info=True, data_dir='/home/data/lung_radiomics/')
+    santa_maria_dataset, santa_maria_info =  tfds.load(f'santa_maria_dataset/{img_type_sm}', with_info=True, data_dir='/home/data/lung_radiomics/')
 
     # Get the split keys (splits) of the dataset
     stanford_patients = list(stanford_info.splits.keys())
